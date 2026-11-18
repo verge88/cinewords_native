@@ -19,6 +19,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
@@ -266,6 +269,23 @@ fun PlayerScreen(state: CineState) {
     if (selectedWord.isNotBlank())
         AddWordDialog(state, onDismiss = { selectedWord = "" }, defaultWord = selectedWord,
             context = english?.text.orEmpty())
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, webView, player) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> {
+                    youtubeIsPlaying = false
+                    player?.pause()
+                    if (youtube) webView?.evaluateJavascript("pausePlayback();", null)
+                    webView?.onPause()
+                }
+                Lifecycle.Event.ON_START -> webView?.onResume()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     DisposableEffect(webView) {
         // Capture the owned view; referring to mutable webView in onDispose can destroy
         // a newly created instance when AndroidView assigns it during recomposition.
@@ -319,6 +339,7 @@ function onYouTubeIframeAPIReady() {
 }
 function seekToMs(ms){if(player && player.seekTo)player.seekTo(ms/1000,true);}
 function setSpeed(rate){if(player && player.setPlaybackRate)player.setPlaybackRate(rate);}
+function pausePlayback(){if(player && player.pauseVideo)player.pauseVideo();}
 </script></body></html>
 """.trimIndent()
 

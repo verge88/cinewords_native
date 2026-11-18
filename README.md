@@ -22,6 +22,8 @@ DDGS_BASE_URL=http://10.0.2.2:4479
 
 Эти значения автоматически попадают в BuildConfig во время сборки. `local.properties` добавлен в `.gitignore`. Публичный Supabase URL и *publishable* key совпадают с Flutter-версией; данные аккаунта и словарь остаются в тех же таблицах.
 
+После успешного запуска [GitHub Actions](https://github.com/verge88/cinewords_native/actions/workflows/android.yml) в артефактах workflow доступен `cinewords-native-debug-apk` (тестовая сборка для Android). Для воспроизведения YouTube и поиска Kinopoisk с вашими ключами необходимо собрать APK со своими `local.properties`; ключи не следует публиковать в репозитории.
+
 ## Реализовано
 
 - Авторизация/регистрация через Supabase, хранение и обновление сессии, выход.
