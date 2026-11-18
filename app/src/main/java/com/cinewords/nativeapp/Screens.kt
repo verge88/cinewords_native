@@ -364,56 +364,7 @@ fun WordDetailScreen(state: CineState) {
 
 @Composable
 fun ReviewScreen(state: CineState) {
-    val scope = rememberCoroutineScope()
-    val reviewList = remember(state.words.toList()) {
-        val due = state.words.filter {
-            it.status != "mastered" && (it.nextReviewAt.isBlank() ||
-                runCatching { Instant.parse(it.nextReviewAt).isBefore(Instant.now().plusSeconds(300)) }
-                    .getOrDefault(false))
-        }
-        if (due.isNotEmpty()) due else state.words.filter { it.status != "mastered" }.shuffled().take(20)
-    }
-    var position by remember { mutableIntStateOf(0) }
-    var showAnswer by remember { mutableStateOf(false) }
-    val word = reviewList.getOrNull(position)
-    Column(Modifier.fillMaxSize().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        TextButton(onClick = { state.route = "dictionary" }) { Text("‹ Словарь") }
-        Header("Повторение SM-2", position.coerceAtMost(reviewList.size).toString() +
-            " / " + reviewList.size)
-        Spacer(Modifier.weight(1f))
-        if (word == null) {
-            Text("Сессия завершена", style = MaterialTheme.typography.headlineMedium)
-            Button(onClick = { state.route = "dictionary" }) { Text("Готово") }
-        } else {
-            ElevatedCard(Modifier.fillMaxWidth().clickable { showAnswer = true }) {
-                Column(Modifier.fillMaxWidth().padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(word.word, style = MaterialTheme.typography.headlineLarge)
-                    Text(word.phonetic)
-                    Spacer(Modifier.height(22.dp))
-                    if (showAnswer) {
-                        Text(word.translation, style = MaterialTheme.typography.titleLarge)
-                        Text(word.context)
-                    } else Text("Нажмите для ответа")
-                }
-            }
-            Spacer(Modifier.height(24.dp))
-            if (!showAnswer) Button(onClick = { showAnswer = true }) { Text("Показать ответ") }
-            else {
-                Text("Как хорошо вы вспомнили?")
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(1 to "Снова", 3 to "Трудно", 4 to "Хорошо", 5 to "Легко")
-                        .forEach { (quality, label) ->
-                            FilledTonalButton(onClick = {
-                                scope.launch { state.review(word, quality) }
-                                position++; showAnswer = false
-                            }, contentPadding = PaddingValues(horizontal = 12.dp)) { Text(label) }
-                        }
-                }
-            }
-        }
-        Spacer(Modifier.weight(1f))
-    }
+    VocabularyReviewScreen(state)
 }
 
 @Composable
