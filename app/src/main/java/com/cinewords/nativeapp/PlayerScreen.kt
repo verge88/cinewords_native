@@ -51,24 +51,24 @@ fun PlayerScreen(state: CineState) {
     val playbackKey = video.youtubeId.ifBlank { video.videoUrl }
     var youtubeIsPlaying by remember(playbackKey) { mutableStateOf(false) }
     var pendingWatchSeconds by remember(playbackKey) { mutableIntStateOf(0) }
-    val subsEn = remember(video) { mutableStateListOf<Subtitle>() }
-    val subsRu = remember(video) { mutableStateListOf<Subtitle>() }
+    val subsEn = remember(playbackKey) { mutableStateListOf<Subtitle>() }
+    val subsRu = remember(playbackKey) { mutableStateListOf<Subtitle>() }
     var pos by remember(playbackKey) { mutableLongStateOf(0L) }
     var duration by remember(playbackKey) { mutableLongStateOf(video.durationSec.toLong() * 1000) }
-    var speed by remember(video) { mutableFloatStateOf(1.0f) }
-    var showRu by remember(video) { mutableStateOf(true) }
-    var showOnScreen by remember(video) { mutableStateOf(true) }
-    var scale by remember(video) { mutableFloatStateOf(1.0f) }
+    var speed by remember(playbackKey) { mutableFloatStateOf(1.0f) }
+    var showRu by remember(playbackKey) { mutableStateOf(true) }
+    var showOnScreen by remember(playbackKey) { mutableStateOf(true) }
+    var scale by remember(playbackKey) { mutableFloatStateOf(1.0f) }
     var selectedWord by remember { mutableStateOf("") }
     var shownSettings by remember { mutableStateOf(false) }
-    var webView by remember(video) { mutableStateOf<WebView?>(null) }
+    var webView by remember(playbackKey) { mutableStateOf<WebView?>(null) }
     var captionError by remember(playbackKey) { mutableStateOf("") }
     val translatedLines = remember(playbackKey) { mutableStateMapOf<Long, String>() }
     var translating by remember(playbackKey) { mutableStateOf(false) }
     var translationError by remember(playbackKey) { mutableStateOf("") }
     val direct = video.sourceType == "direct" && video.videoUrl.isNotBlank()
     val youtube = video.sourceType == "youtube" && video.youtubeId.isNotBlank()
-    val player = remember(video) {
+    val player = remember(playbackKey) {
         if (direct) ExoPlayer.Builder(context)
             .setMediaSourceFactory(DefaultMediaSourceFactory(
                 DefaultDataSource.Factory(context,
@@ -93,6 +93,8 @@ fun PlayerScreen(state: CineState) {
             }
         }
         try {
+            subsEn.clear()
+            subsRu.clear()
             subsEn.addAll(state.api.subtitles(video, "en"))
             subsRu.addAll(state.api.subtitles(video, "ru"))
             if (subsEn.isEmpty() && subsRu.isEmpty())
@@ -271,9 +273,13 @@ fun PlayerScreen(state: CineState) {
         AddWordDialog(state, onDismiss = { selectedWord = "" }, defaultWord = selectedWord,
             context = english?.text.orEmpty())
     DisposableEffect(webView) {
+        // Capture the owned view; referring to mutable webView in onDispose can destroy
+        // a newly created instance when AndroidView assigns it during recomposition.
+        val ownedView = webView
         onDispose {
-            webView?.removeJavascriptInterface("CineBridge")
-            webView?.destroy()
+            ownedView?.removeJavascriptInterface("CineBridge")
+            ownedView?.stopLoading()
+            ownedView?.destroy()
         }
     }
 }
