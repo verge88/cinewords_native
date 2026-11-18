@@ -8,6 +8,8 @@ import argparse
 import os
 from pathlib import Path
 import re
+from tempfile import TemporaryDirectory
+from urllib.request import Request, urlopen
 
 KEY_SOURCES = {
     "YOUTUBE_API_KEY": ("lib/services/youtube_config.dart", "apiKey"),
@@ -66,16 +68,37 @@ def import_keys(source_dir: Path, properties_file: Path, force: bool = False) ->
     return values
 
 
+def download_public_flutter_configs(output_dir: Path) -> None:
+    """Fetch only the three public configuration files; Flutter has broken gitlinks."""
+    for source_file, _ in KEY_SOURCES.values():
+        url = ("https://raw.githubusercontent.com/verge88/cinewords/master/"
+               + source_file)
+        request = Request(url, headers={"User-Agent": "CineWords-Native-CI"})
+        with urlopen(request, timeout=20) as response:
+            content = response.read().decode("utf-8")
+        dest = output_dir / source_file
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(content, encoding="utf-8")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, default=Path("../cinewords"),
                         help="Path to an existing Flutter cinewords checkout")
+    parser.add_argument("--github", action="store_true",
+                        help="Fetch only the public Flutter config files from GitHub")
     parser.add_argument("--output", type=Path, default=Path("local.properties"),
                         help="Ignored Android local.properties file")
     parser.add_argument("--force", action="store_true",
                         help="Replace existing API key entries in local.properties")
     args = parser.parse_args()
-    imported = import_keys(args.source, args.output, force=args.force)
+    if args.github:
+        with TemporaryDirectory(prefix="cinewords-flutter-config-") as temporary:
+            public_source = Path(temporary)
+            download_public_flutter_configs(public_source)
+            imported = import_keys(public_source, args.output, force=args.force)
+    else:
+        imported = import_keys(args.source, args.output, force=args.force)
     print("Imported Flutter API configuration: " + ", ".join(imported.keys()))
     print("Values are stored only in " + str(args.output) + " (not printed).")
 

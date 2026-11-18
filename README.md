@@ -16,8 +16,9 @@ gradle :app:testDebugUnitTest
 В Flutter-репозитории уже настроены клиентские API-ключи **YouTube Data API v3**, **Kinopoisk.dev** и **OpenSubtitles.com**. Для нативного проекта есть автоматический импорт из Flutter-исходников без копирования значений в Git:
 
 ```bash
-git clone https://github.com/verge88/cinewords.git ../cinewords
-python3 tools/import_flutter_api_keys.py --source ../cinewords
+python3 tools/import_flutter_api_keys.py --github
+# или при наличии локальной копии Flutter:
+# python3 tools/import_flutter_api_keys.py --source ../cinewords
 gradle :app:assembleDebug
 ```
 
@@ -33,7 +34,7 @@ OPENSUBTITLES_API_KEY=...
 DDGS_BASE_URL=http://10.0.2.2:4479
 ```
 
-Переменные окружения (включая GitHub Actions Secrets) имеют приоритет над `local.properties`. В CI происходит checkout публичного Flutter-репозитория и импорт клиентских ключей **во время сборки**; значения ключей не добавляются в Git нативного проекта. После успешной сборки [GitHub Actions](https://github.com/verge88/cinewords_native/actions/workflows/android.yml) публикует `cinewords-native-debug-apk` и результаты тестов.
+Переменные окружения (включая GitHub Actions Secrets) имеют приоритет над `local.properties`. В CI скачиваются только три публичных Flutter-файла конфигурации (без клонирования репозитория, в котором есть некорректный gitlink) и импортируются клиентские ключи **во время сборки**; значения ключей не добавляются в Git нативного проекта. После успешной сборки [GitHub Actions](https://github.com/verge88/cinewords_native/actions/workflows/android.yml) публикует `cinewords-native-debug-apk` и результаты тестов.
 
 **Важно:** используемые во Flutter клиентские API-ключи уже опубликованы в исходном коде. Любые ключи, встроенные в APK, можно извлечь; это не безопасное хранилище секретов. Для приватных токенов нужен серверный прокси; для клиентских ключей желательно задать доступные ограничения в консоли API-провайдера. Квоты и ограничения на Android-пакет/подпись могут препятствовать использованию перенесённых ключей.
 
