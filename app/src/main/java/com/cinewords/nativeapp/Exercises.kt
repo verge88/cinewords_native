@@ -98,7 +98,8 @@ private fun ClozeExercise() {
     var index by remember { mutableIntStateOf(0) }
     var answer by remember { mutableIntStateOf(-1) }
     var streak by remember { mutableIntStateOf(0) }
-    val item = clozes[index % clozes.size]
+    val shuffledItems = remember { clozes.shuffled() }
+    val item = shuffledItems[index % shuffledItems.size]
     Text("🔥 Серия: " + streak)
     Spacer(Modifier.height(24.dp))
     Text(item.sentence.replace("___", if (answer < 0) "______" else item.options[answer]),
@@ -170,8 +171,23 @@ private fun DefinitionExercise(state: CineState) {
     var input by remember(answer) { mutableStateOf("") }
     var checked by remember(answer) { mutableStateOf(false) }
     LaunchedEffect(answer) {
+        val sourceCard = state.words.firstOrNull { it.word.equals(answer, ignoreCase = true) }
+        val fallback = sourceCard?.translation?.takeIf { it.isNotBlank() }
+            ?.let { "Перевод: " + it }
+            ?: sourceCard?.context?.takeIf { it.isNotBlank() }
+                ?.replace(Regex(Regex.escape(answer), RegexOption.IGNORE_CASE), "_____")
+                ?.let { "Контекст: " + it }
+            ?: when (answer.lowercase()) {
+                "apple" -> "A round fruit that grows on trees."
+                "mountain" -> "A very high natural elevation of the earth's surface."
+                "journey" -> "The act of travelling from one place to another."
+                "courage" -> "The ability to do something despite being afraid."
+                "beautiful" -> "Very pleasing to the eye or the mind."
+                else -> "Слово начинается с " + answer.first() + " и содержит " +
+                    answer.length + " букв."
+            }
         definition = runCatching { state.api.lookup(answer).definition }.getOrDefault("")
-            .ifBlank { "Угадайте слово из вашего словаря по его переводу" }
+            .ifBlank { fallback }
     }
     Text(definition, style = MaterialTheme.typography.titleLarge)
     Spacer(Modifier.height(16.dp))
@@ -334,7 +350,7 @@ private fun MinimalPairsExercise() {
     var selected by remember(index) { mutableIntStateOf(-1) }
     var streak by remember { mutableIntStateOf(0) }
     val pair = minimalPairs[index % minimalPairs.size]
-    val correct = index % 2
+    val correct = remember(index) { kotlin.random.Random.nextInt(2) }
     Text("Что вы услышали?", style = MaterialTheme.typography.titleLarge)
     Spacer(Modifier.height(16.dp))
     FilledTonalButton(onClick = { speech.speak(if (correct == 0) pair.first else pair.second, 0.65f) }) {
