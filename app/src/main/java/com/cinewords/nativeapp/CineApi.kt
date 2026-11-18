@@ -323,7 +323,12 @@ class CineApi(context: Context) {
             val tracks = runCatching {
                 YoutubeCaptions.fetch(video.youtubeId, lang)
             }.getOrDefault(emptyList())
-            if (tracks.isNotEmpty()) return tracks
+            if (tracks.isNotEmpty()) {
+                if (video.id.matches(Regex("^[0-9a-fA-F-]{36}$"))) {
+                    runCatching { cacheSubtitles(video.id, lang, tracks) }
+                }
+                return tracks
+            }
         }
         val url = if (lang == "ru") video.subtitleUrlRu else video.subtitleUrl
         val remote = url.ifBlank {
@@ -339,6 +344,37 @@ class CineApi(context: Context) {
         return runCatching {
             SubtitleParser.parse(getText(remote), lang)
         }.getOrDefault(emptyList())
+    }
+
+    /** Cache captions in the same Supabase subtitles table as the Flutter app. */
+    suspend fun cacheSubtitles(videoId: String, lang: String, captions: List<Subtitle>) {
+        if (!videoId.matches(Regex("^[0-9a-fA-F-]{36}$")) || captions.isEmpty()) return
+        val auth = token ?: return
+        withContext(Dispatchers.IO) {
+            captions.chunked(100).forEachIndexed { chunkIndex, chunk ->
+                val batch = JSONArray()
+                chunk.forEachIndexed { i, caption ->
+                    batch.put(JSONObject()
+                        .put("video_id", videoId)
+                        .put("language", lang)
+                        .put("start_ms", caption.startMs)
+                        .put("end_ms", caption.endMs)
+                        .put("text", caption.text)
+                        .put("sequence_index", chunkIndex * 100 + i))
+                }
+                val request = Request.Builder()
+                    .url(BuildConfig.SUPABASE_URL + "/rest/v1/subtitles")
+                    .header("apikey", BuildConfig.SUPABASE_ANON_KEY)
+                    .header("Authorization", "Bearer " + auth)
+                    .header("Prefer", "return=minimal")
+                    .post(batch.toString().toRequestBody(jsonType)).build()
+                http.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful)
+                        throw ApiError(response.code,
+                            "Subtitle cache HTTP " + response.code)
+                }
+            }
+        }
     }
 
     suspend fun profile(): Profile {

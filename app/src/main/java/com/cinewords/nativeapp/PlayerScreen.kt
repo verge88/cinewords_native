@@ -76,6 +76,15 @@ fun PlayerScreen(state: CineState) {
         onDispose { player?.release() }
     }
     LaunchedEffect(video) {
+        // Persist YouTube search results so subtitles and watched progress
+        // share the same database video UUID as in the Flutter version.
+        if (youtube && video.id.isBlank()) {
+            val saved = runCatching { state.api.saveVideo(video) }.getOrNull()
+            if (saved != null && saved.id.isNotBlank()) {
+                state.selectedVideo = saved
+                return@LaunchedEffect
+            }
+        }
         try {
             subsEn.addAll(state.api.subtitles(video, "en"))
             subsRu.addAll(state.api.subtitles(video, "ru"))
