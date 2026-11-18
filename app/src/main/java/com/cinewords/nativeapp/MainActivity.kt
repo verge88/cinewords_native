@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.verticalScroll
@@ -17,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
@@ -137,8 +139,8 @@ private fun AuthScreen(state: CineState) {
     var message by remember { mutableStateOf("") }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-        Icon(Icons.Default.MovieFilter, null, Modifier.size(72.dp),
-            tint = MaterialTheme.colorScheme.primary)
+        Image(painter = painterResource(R.drawable.splash_logo),
+            contentDescription = "CineWords", modifier = Modifier.size(92.dp))
         Spacer(Modifier.height(16.dp))
         Text("CineWords", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
         Text("Изучайте английский по фильмам и видео",

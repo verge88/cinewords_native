@@ -5,6 +5,8 @@
     <application
         android:allowBackup="false"
         android:label="CineWords"
+        android:icon="@drawable/cinewords_icon"
+        android:roundIcon="@drawable/cinewords_icon"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:usesCleartextTraffic="false"
         android:networkSecurityConfig="@xml/network_security_config">
