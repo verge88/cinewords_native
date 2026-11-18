@@ -317,6 +317,14 @@ class CineApi(context: Context) {
             }.getOrDefault(emptyList())
             if (cached.isNotEmpty()) return cached
         }
+        // Prefer real timed-text tracks exposed on the YouTube watch page.
+        // Legacy timedtext URL below is a fallback when no caption tracks are discoverable.
+        if (video.sourceType == "youtube" && video.youtubeId.isNotBlank()) {
+            val tracks = runCatching {
+                YoutubeCaptions.fetch(video.youtubeId, lang)
+            }.getOrDefault(emptyList())
+            if (tracks.isNotEmpty()) return tracks
+        }
         val url = if (lang == "ru") video.subtitleUrlRu else video.subtitleUrl
         val remote = url.ifBlank {
             when {
