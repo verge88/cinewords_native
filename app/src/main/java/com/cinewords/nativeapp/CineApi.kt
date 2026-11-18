@@ -418,6 +418,46 @@ class CineApi(context: Context) {
 
 
     /** Public-domain Internet Archive film catalog, matching the Flutter ArchiveOrgService. */
+
+    /** Optional DDGS local video metasearch, matching the source Flutter DDGS service. */
+    suspend fun ddgs(query: String, page: Int = 1): Pair<List<Video>, Boolean> {
+        val base = BuildConfig.DDGS_BASE_URL.trimEnd('/')
+        val url = (base + "/search/videos").toHttpUrl().newBuilder()
+            .addQueryParameter("query", query.trim())
+            .addQueryParameter("region", "us-en")
+            .addQueryParameter("safesearch", "moderate")
+            .addQueryParameter("max_results", "20")
+            .addQueryParameter("page", page.coerceIn(1, 5).toString()).build()
+        val body = getText(url.toString())
+        val trimmed = body.trim()
+        val list = if (trimmed.startsWith("[")) JSONArray(trimmed)
+            else JSONObject(trimmed).optJSONArray("results") ?: JSONArray()
+        val entries = list.objects().filter {
+            it.optString("content").isNotBlank() && it.optString("title").isNotBlank()
+        }
+        val videos = entries.map { json ->
+            val source = json.optString("content")
+            val iframe = json.optString("embed_url")
+            val ytId = extractYouTubeId(source)
+            val isYouTube = ytId.matches(Regex("^[A-Za-z0-9_-]{11}$")) &&
+                (source.contains("youtube.com") || source.contains("youtu.be"))
+            val media = source.lowercase().substringBefore('?')
+                .let { it.endsWith(".mp4") || it.endsWith(".m3u8") || it.endsWith(".webm") }
+            val images = json.optJSONObject("images")
+            val thumb = images?.optString("large").orEmpty().ifBlank {
+                images?.optString("medium").orEmpty()
+            }
+            Video(youtubeId = if (isYouTube) ytId else "",
+                title = json.optString("title"),
+                thumbnail = thumb, channel = json.optString("uploader",
+                    json.optString("publisher")), description = json.optString("description"),
+                sourceType = if (isYouTube) "youtube" else if (media) "direct" else "embed",
+                videoUrl = if (isYouTube) "" else iframe.ifBlank { source },
+                category = "general")
+        }.distinctBy { it.youtubeId.ifBlank { it.videoUrl } }
+        return videos to (entries.size >= 20 && page < 5)
+    }
+
     suspend fun archiveVideos(query: String): List<Video> {
         val q = if (query.isBlank())
             "collection:(feature_films) AND mediatype:(movies) AND format:(MPEG4)"

@@ -95,7 +95,8 @@ fun CatalogScreen(state: CineState) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.horizontalScroll(rememberScrollState())) {
             listOf("youtube" to "YouTube", "library" to "Медиатека",
-                "movies" to "Фильмы", "archive" to "Архив", "favorites" to "Избранное").forEach { (id, label) ->
+                "movies" to "Фильмы", "archive" to "Архив",
+                "ddgs" to "Видеопоиск", "favorites" to "Избранное").forEach { (id, label) ->
                 FilterChip(selected = state.browseTab == id,
                     onClick = { scope.launch { state.browse(id) } }, label = { Text(label) })
             }
@@ -113,6 +114,9 @@ fun CatalogScreen(state: CineState) {
         }
         if (state.browseTab == "movies" && BuildConfig.KINOPOISK_API_KEY.isBlank())
             Text("Для поиска фильмов укажите KINOPOISK_API_KEY в local.properties.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (state.browseTab == "ddgs")
+            Text("Поиск через DDGS API. Сервер: " + BuildConfig.DDGS_BASE_URL,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (state.browseTab == "youtube" && BuildConfig.YOUTUBE_API_KEY.isBlank())
             Text("YouTube API не настроен: доступен поиск по сохранённым видео.",
@@ -139,7 +143,7 @@ fun CatalogScreen(state: CineState) {
                         VideoTile(video, { state.openVideo(video) }, video.id in state.favoriteIds,
                             { scope.launch { state.toggleFavorite(video) } })
                     }
-                    if (state.browseTab == "youtube" && state.searchPage.isNotBlank())
+                    if (state.browseTab in listOf("youtube", "ddgs") && state.searchPage.isNotBlank())
                         item {
                             Button(onClick = { scope.launch { state.search(more = true) } },
                                 modifier = Modifier.fillMaxWidth()) { Text("Загрузить ещё") }

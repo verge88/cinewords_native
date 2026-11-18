@@ -79,6 +79,16 @@ class CineState(context: Context) {
             "library" -> results.replace(api.searchLibrary(query))
             "movies" -> movies.replace(api.movies(query))
             "archive" -> results.replace(api.archiveVideos(query))
+            "ddgs" -> {
+                val page = if (more) searchPage.toIntOrNull() ?: 1 else 1
+                val (items, hasMore) = api.ddgs(query, page)
+                if (!more) results.clear()
+                items.forEach { v ->
+                    if (results.none { it.youtubeId.ifBlank { it.videoUrl } ==
+                        v.youtubeId.ifBlank { v.videoUrl } }) results.add(v)
+                }
+                searchPage = if (hasMore) (page + 1).toString() else ""
+            }
             "favorites" -> reloadFavorites()
         }
     }
@@ -90,6 +100,7 @@ class CineState(context: Context) {
             "favorites" -> safe { reloadFavorites() }
             "movies" -> safe { movies.replace(api.movies("")) }
             "archive" -> safe { results.replace(api.archiveVideos("")) }
+            "ddgs" -> { results.clear(); searchPage = "" }
             "youtube" -> safe {
                 val (items, next) = api.youtube("learn english conversation")
                 results.replace(items)

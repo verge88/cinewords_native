@@ -28,6 +28,8 @@ android {
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"sb_publishable_wEbr1LTLfPQukwo8yT65fw_k-GQPD6f\"")
         buildConfigField("String", "YOUTUBE_API_KEY", "\"${secret("YOUTUBE_API_KEY")}\"")
         buildConfigField("String", "KINOPOISK_API_KEY", "\"${secret("KINOPOISK_API_KEY")}\"")
+        buildConfigField("String", "DDGS_BASE_URL", "\"" +
+            (secret("DDGS_BASE_URL").ifBlank { "http://10.0.2.2:4479" }) + "\"")
     }
     buildFeatures {
         compose = true
