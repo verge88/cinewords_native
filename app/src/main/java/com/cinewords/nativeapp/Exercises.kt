@@ -222,29 +222,69 @@ private val dictations = listOf(
     "Time flies when you are having fun with friends"
 )
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DictationExercise() {
     val speech = rememberSpeech()
     var index by remember { mutableIntStateOf(0) }
-    var typed by remember(index) { mutableStateOf("") }
-    var checked by remember(index) { mutableStateOf(false) }
+    var gapEvery by remember { mutableIntStateOf(5) }
+    var answers by remember(index, gapEvery) { mutableStateOf(mapOf<Int, String>()) }
+    var checked by remember(index, gapEvery) { mutableStateOf(false) }
     val sentence = dictations[index % dictations.size]
-    val words = sentence.split(" ")
-    val gap = (index * 3 + 2) % words.size
-    Text("Прослушайте предложение и напишите пропущенное слово.")
+    val words = remember(sentence) { sentence.split(Regex("\\s+")) }
+    val gaps = remember(index, gapEvery) {
+        words.indices.filter { (it + 1) % gapEvery == 0 }.ifEmpty { listOf(words.lastIndex) }
+    }
+    val correct = gaps.count { indexOfGap ->
+        answers[indexOfGap].orEmpty().trim().lowercase()
+            .replace(Regex("[^a-z0-9]"), "") ==
+        words[indexOfGap].lowercase().replace(Regex("[^a-z0-9]"), "")
+    }
+    Text("Прослушайте предложение и заполните все пропуски.", style = MaterialTheme.typography.titleMedium)
+    Row(Modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(7 to "Легко", 5 to "Средне", 3 to "Сложно").forEach { (interval, label) ->
+            FilterChip(selected = gapEvery == interval,
+                onClick = { gapEvery = interval }, label = { Text(label) })
+        }
+    }
     Spacer(Modifier.height(12.dp))
-    Button(onClick = { speech.speak(sentence) }) {
-        Icon(Icons.Default.Headset, null); Text(" Слушать")
+    FilledTonalButton(onClick = { speech.speak(sentence, 0.65f) }) {
+        Icon(Icons.Default.Headset, contentDescription = null)
+        Text(" Слушать")
+    }
+    Spacer(Modifier.height(20.dp))
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        words.forEachIndexed { i, word ->
+            if (i in gaps) {
+                OutlinedTextField(
+                    value = answers[i].orEmpty(),
+                    onValueChange = { value -> if (!checked) answers = answers + (i to value) },
+                    enabled = !checked, singleLine = true,
+                    placeholder = { Text("...") },
+                    modifier = Modifier.width(115.dp),
+                    isError = checked &&
+                        answers[i].orEmpty().trim().lowercase()
+                            .replace(Regex("[^a-z0-9]"), "") !=
+                        word.lowercase().replace(Regex("[^a-z0-9]"), "")
+                )
+            } else Text(word, style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(top = 14.dp))
+        }
+    }
+    if (checked) {
+        Spacer(Modifier.height(12.dp))
+        Text("Верно: " + correct + " / " + gaps.size,
+            color = if (correct == gaps.size) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.error)
+        if (correct != gaps.size) Text("Правильный текст: " + sentence)
     }
     Spacer(Modifier.height(16.dp))
-    Text(words.mapIndexed { i, w -> if (i == gap) "______" else w }.joinToString(" "),
-        style = MaterialTheme.typography.titleLarge)
-    OutlinedTextField(value = typed, onValueChange = { typed = it },
-        label = { Text("Пропущенное слово") }, modifier = Modifier.fillMaxWidth())
-    if (checked) Feedback(typed.trim().equals(words[gap], true), sentence)
-    Button(onClick = { if (checked) index++ else checked = true }) {
-        Text(if (checked) "Дальше" else "Проверить")
-    }
+    Button(onClick = {
+        if (checked) index = (index + 1) % dictations.size
+        else checked = true
+    }) { Text(if (checked) "Далее" else "Проверить") }
 }
 
 private val minimalPairs = listOf(
@@ -390,27 +430,81 @@ private fun ReaderExercise(state: CineState) {
             context = passage.second.split(". ").firstOrNull { it.contains(word, true) }.orEmpty())
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun InvisibleExercise() {
     var index by remember { mutableIntStateOf(0) }
     val passage = readers[index % readers.size]
     val words = remember(index) { passage.second.split(" ") }
-    val hiddenIndex = (index * 7 + 3) % words.size
-    val hidden = words[hiddenIndex].trim('.', ',', '!', '?')
-    var input by remember(index) { mutableStateOf("") }
+    val hiddenOrder = remember(index) {
+        words.indices.filter { (it + 1) % 4 == 0 && words[it].any(Char::isLetter) }.shuffled()
+    }
+    var phase by remember(index) { mutableStateOf("preview") }
+    var countdown by remember(index) { mutableIntStateOf(5) }
+    var hiddenCount by remember(index) { mutableIntStateOf(0) }
+    var answers by remember(index) { mutableStateOf(mapOf<Int, String>()) }
     var checked by remember(index) { mutableStateOf(false) }
-    Text("Восстановите слово, исчезнувшее из текста")
-    Spacer(Modifier.height(16.dp))
-    Text(words.mapIndexed { i, token -> if (i == hiddenIndex) "______" else token }.joinToString(" "),
-        style = MaterialTheme.typography.titleLarge)
-    Spacer(Modifier.height(12.dp))
-    OutlinedTextField(value = input, onValueChange = { input = it },
-        label = { Text("Исчезнувшее слово") }, modifier = Modifier.fillMaxWidth())
-    if (checked) Feedback(input.trim().equals(hidden, true), hidden)
-    Button(onClick = { if (checked) index++ else checked = true }) {
-        Text(if (checked) "Далее" else "Проверить")
+
+    LaunchedEffect(index) {
+        repeat(5) {
+            delay(1000)
+            if (phase != "preview") return@LaunchedEffect
+            countdown--
+        }
+        phase = "disappearing"
+        while (hiddenCount < hiddenOrder.size) {
+            delay(1200)
+            if (phase != "disappearing") return@LaunchedEffect
+            hiddenCount++
+        }
+        phase = "recall"
+    }
+
+    Text(passage.first, style = MaterialTheme.typography.titleLarge)
+    Spacer(Modifier.height(8.dp))
+    Text(when (phase) {
+        "preview" -> "Запомните текст: слова начнут исчезать через " + countdown + " сек."
+        "disappearing" -> "Слова постепенно исчезают: " + hiddenCount + " / " + hiddenOrder.size
+        else -> "Восстановите пропавшие слова по памяти"
+    })
+    Spacer(Modifier.height(20.dp))
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        words.forEachIndexed { i, word ->
+            if (i !in hiddenOrder || (phase == "preview") ||
+                (phase == "disappearing" && i !in hiddenOrder.take(hiddenCount))) {
+                Text(word, style = MaterialTheme.typography.titleMedium)
+            } else if (phase == "recall") {
+                OutlinedTextField(value = answers[i].orEmpty(),
+                    onValueChange = { value -> if (!checked) answers = answers + (i to value) },
+                    singleLine = true, enabled = !checked,
+                    modifier = Modifier.width((word.length * 11).coerceIn(80, 155).dp),
+                    placeholder = { Text("...") },
+                    isError = checked && normalizeMissingWord(answers[i].orEmpty()) != normalizeMissingWord(word))
+            } else {
+                Text("▰▰▰", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+    Spacer(Modifier.height(18.dp))
+    if (phase != "recall") {
+        OutlinedButton(onClick = { phase = "recall" }) { Text("Скрыть всё и проверить") }
+    } else {
+        val correct = hiddenOrder.count {
+            normalizeMissingWord(answers[it].orEmpty()) == normalizeMissingWord(words[it])
+        }
+        if (checked) {
+            Feedback(correct == hiddenOrder.size, "Верно " + correct + " / " + hiddenOrder.size)
+            if (correct < hiddenOrder.size) Text("Оригинал: " + passage.second)
+        }
+        Button(onClick = {
+            if (checked) index++ else checked = true
+        }) { Text(if (checked) "Следующий текст" else "Проверить") }
     }
 }
+
+private fun normalizeMissingWord(input: String): String =
+    input.lowercase().replace(Regex("[^a-z0-9]"), "")
 
 @Composable
 private fun Feedback(correct: Boolean, answer: String) {
