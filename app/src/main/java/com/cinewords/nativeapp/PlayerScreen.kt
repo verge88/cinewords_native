@@ -35,9 +35,9 @@ import java.util.Locale
 import org.json.JSONObject
 
 /** The bridge is installed ONLY in our own YouTube iframe page, never in third-party movie embeds. */
-private class YoutubeTimeBridge(private val time: (Long) -> Unit) {
-    @JavascriptInterface fun onTime(milliseconds: Long) {
-        Handler(Looper.getMainLooper()).post { time(milliseconds) }
+private class YoutubeTimeBridge(private val status: (Long, Boolean) -> Unit) {
+    @JavascriptInterface fun onTime(milliseconds: Long, playing: Boolean) {
+        Handler(Looper.getMainLooper()).post { status(milliseconds, playing) }
     }
 }
 
@@ -47,10 +47,14 @@ fun PlayerScreen(state: CineState) {
     val video = state.selectedVideo ?: return
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    // Preserve playback accounting when a YouTube search result receives its database UUID.
+    val playbackKey = video.youtubeId.ifBlank { video.videoUrl }
+    var youtubeIsPlaying by remember(playbackKey) { mutableStateOf(false) }
+    var pendingWatchSeconds by remember(playbackKey) { mutableIntStateOf(0) }
     val subsEn = remember(video) { mutableStateListOf<Subtitle>() }
     val subsRu = remember(video) { mutableStateListOf<Subtitle>() }
-    var pos by remember(video) { mutableLongStateOf(0L) }
-    var duration by remember(video) { mutableLongStateOf(video.durationSec.toLong() * 1000) }
+    var pos by remember(playbackKey) { mutableLongStateOf(0L) }
+    var duration by remember(playbackKey) { mutableLongStateOf(video.durationSec.toLong() * 1000) }
     var speed by remember(video) { mutableFloatStateOf(1.0f) }
     var showRu by remember(video) { mutableStateOf(true) }
     var showOnScreen by remember(video) { mutableStateOf(true) }
@@ -58,7 +62,10 @@ fun PlayerScreen(state: CineState) {
     var selectedWord by remember { mutableStateOf("") }
     var shownSettings by remember { mutableStateOf(false) }
     var webView by remember(video) { mutableStateOf<WebView?>(null) }
-    var captionError by remember(video) { mutableStateOf("") }
+    var captionError by remember(playbackKey) { mutableStateOf("") }
+    val translatedLines = remember(playbackKey) { mutableStateMapOf<Long, String>() }
+    var translating by remember(playbackKey) { mutableStateOf(false) }
+    var translationError by remember(playbackKey) { mutableStateOf("") }
     val direct = video.sourceType == "direct" && video.videoUrl.isNotBlank()
     val youtube = video.sourceType == "youtube" && video.youtubeId.isNotBlank()
     val player = remember(video) {
@@ -99,6 +106,28 @@ fun PlayerScreen(state: CineState) {
             delay(250)
         }
     }
+    // Count only seconds while playback is actually running; seeking does not add watch time.
+    LaunchedEffect(playbackKey, player) {
+        while (isActive) {
+            delay(1000)
+            val playing = if (direct) player?.isPlaying == true else if (youtube) youtubeIsPlaying else false
+            if (playing) {
+                pendingWatchSeconds += 1
+                if (pendingWatchSeconds >= 30) {
+                    state.reportWatch(state.selectedVideo?.id.orEmpty(), pos, pendingWatchSeconds)
+                    pendingWatchSeconds = 0
+                }
+            }
+        }
+    }
+    DisposableEffect(playbackKey) {
+        onDispose {
+            if (pendingWatchSeconds > 0) {
+                state.reportWatch(state.selectedVideo?.id.orEmpty(), pos, pendingWatchSeconds)
+                pendingWatchSeconds = 0
+            }
+        }
+    }
     val english = subsEn.lastOrNull { it.startMs <= pos && it.endMs >= pos }
     val russian = subsRu.lastOrNull { it.startMs <= pos && it.endMs >= pos }
     val progress = if (duration > 0) (pos.toFloat() / duration).coerceIn(0f, 1f) else 0f
@@ -106,7 +135,6 @@ fun PlayerScreen(state: CineState) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = {
-                scope.launch { state.api.logWatch(video.id, pos, (pos / 1000).toInt()) }
                 state.route = "video_detail"
             }) { Text("‹ Назад") }
             Text(video.title, modifier = Modifier.weight(1f), maxLines = 1)
@@ -126,7 +154,10 @@ fun PlayerScreen(state: CineState) {
                     settings.mediaPlaybackRequiresUserGesture = false
                     webChromeClient = WebChromeClient()
                     webViewClient = WebViewClient()
-                    addJavascriptInterface(YoutubeTimeBridge { pos = it }, "CineBridge")
+                    addJavascriptInterface(YoutubeTimeBridge { position, playing ->
+                        pos = position
+                        youtubeIsPlaying = playing
+                    }, "CineBridge")
                     loadDataWithBaseURL("https://www.youtube.com", youtubeHtml(video.youtubeId),
                         "text/html", "UTF-8", null)
                     webView = this
@@ -194,10 +225,28 @@ fun PlayerScreen(state: CineState) {
             if (english != null) {
                 WordFlow(text = english.text, scale = scale) { word -> selectedWord = word }
             }
-            if (showRu && russian != null) {
-                Text(russian.text, style = MaterialTheme.typography.bodyLarge.copy(
+            val translation = if (russian != null) russian.text
+                else english?.let { translatedLines[it.startMs] }
+            if (showRu && !translation.isNullOrBlank()) {
+                Text(translation, style = MaterialTheme.typography.bodyLarge.copy(
                     fontSize = MaterialTheme.typography.bodyLarge.fontSize * scale),
                     color = MaterialTheme.colorScheme.primary)
+            }
+            if (showRu && english != null && translation.isNullOrBlank()) {
+                TextButton(enabled = !translating, onClick = {
+                    translating = true
+                    translationError = ""
+                    scope.launch {
+                        try {
+                            translatedLines[english.startMs] = state.api.translateEnglish(english.text)
+                        } catch (e: Exception) {
+                            translationError = e.message ?: "Не удалось перевести реплику"
+                        } finally { translating = false }
+                    }
+                }) { Text(if (translating) "Перевод…" else "Перевести реплику") }
+                if (translationError.isNotBlank())
+                    Text(translationError, color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall)
             }
             if (english == null && russian == null && captionError.isNotBlank())
                 Text(captionError, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -264,7 +313,7 @@ function onYouTubeIframeAPIReady() {
     playerVars:{'playsinline':1,'cc_load_policy':0},
     events:{onReady:function(){
       setInterval(function(){try {
-        if(player && player.getCurrentTime) CineBridge.onTime(Math.round(player.getCurrentTime()*1000));
+        if(player && player.getCurrentTime) CineBridge.onTime(Math.round(player.getCurrentTime()*1000), player.getPlayerState() === YT.PlayerState.PLAYING);
       }catch(e){}},250);
     }}});
 }

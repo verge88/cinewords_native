@@ -616,6 +616,25 @@ class CineApi(context: Context) {
         return video
     }
 
+    /**
+     * Explicit, on-demand EN -> RU translation; no bulk calls or private subtitle upload.
+     * The public MyMemory API has rate/length limits, so keep requests short.
+     */
+    suspend fun translateEnglish(sentence: String): String {
+        val trimmed = sentence.trim()
+        require(trimmed.isNotBlank()) { "Нет текста для перевода" }
+        require(trimmed.length <= 450) { "Реплика слишком длинная для сервиса перевода" }
+        val url = "https://api.mymemory.translated.net/get".toHttpUrl().newBuilder()
+            .addQueryParameter("q", trimmed)
+            .addQueryParameter("langpair", "en|ru").build().toString()
+        val response = JSONObject(getText(url))
+        if (response.optInt("responseStatus", 200) != 200)
+            throw IllegalStateException(response.optString("responseDetails", "Сервис перевода недоступен"))
+        val value = response.optJSONObject("responseData")?.optString("translatedText").orEmpty().trim()
+        if (value.isBlank()) throw IllegalStateException("Сервис не вернул перевод")
+        return android.text.Html.fromHtml(value, android.text.Html.FROM_HTML_MODE_LEGACY).toString().trim()
+    }
+
     suspend fun lookup(word: String): Lookup {
         val normalized = word.trim()
         var phonetic = ""; var definition = ""; var translation = ""

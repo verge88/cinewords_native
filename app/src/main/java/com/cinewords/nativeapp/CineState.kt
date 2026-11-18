@@ -1,6 +1,10 @@
 package com.cinewords.nativeapp
 
 import android.content.Context
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -8,6 +12,7 @@ import androidx.compose.runtime.setValue
 
 class CineState(context: Context) {
     val api = CineApi(context.applicationContext)
+    private val progressScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val prefs = context.getSharedPreferences("cinewords_settings", Context.MODE_PRIVATE)
 
     var route by mutableStateOf("home")
@@ -125,6 +130,14 @@ class CineState(context: Context) {
     suspend fun review(word: Word, quality: Int) = safe {
         api.review(word.id, quality)
         words.replace(api.words())
+    }
+
+    /** Fire-and-forget persistence that survives leaving the player composable. */
+    fun reportWatch(videoId: String, positionMs: Long, actuallyWatchedSeconds: Int) {
+        if (actuallyWatchedSeconds <= 0) return
+        progressScope.launch {
+            api.logWatch(videoId, positionMs, actuallyWatchedSeconds)
+        }
     }
 
     suspend fun loadProfile() = safe { profile = api.profile() }
