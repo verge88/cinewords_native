@@ -50,7 +50,7 @@ fun PlayerScreen(state: CineState) {
     // Preserve playback accounting when a YouTube search result receives its database UUID.
     val playbackKey = video.youtubeId.ifBlank { video.videoUrl }
     var youtubeIsPlaying by remember(playbackKey) { mutableStateOf(false) }
-    var pendingWatchSeconds by remember(playbackKey) { mutableIntStateOf(0) }
+    val watchCounter = remember(playbackKey) { WatchProgressCounter() }
     val subsEn = remember(playbackKey) { mutableStateListOf<Subtitle>() }
     val subsRu = remember(playbackKey) { mutableStateListOf<Subtitle>() }
     var pos by remember(playbackKey) { mutableLongStateOf(0L) }
@@ -113,21 +113,15 @@ fun PlayerScreen(state: CineState) {
         while (isActive) {
             delay(1000)
             val playing = if (direct) player?.isPlaying == true else if (youtube) youtubeIsPlaying else false
-            if (playing) {
-                pendingWatchSeconds += 1
-                if (pendingWatchSeconds >= 30) {
-                    state.reportWatch(state.selectedVideo?.id.orEmpty(), pos, pendingWatchSeconds)
-                    pendingWatchSeconds = 0
-                }
+            if (watchCounter.tick(playing)) {
+                state.reportWatch(state.selectedVideo?.id.orEmpty(), pos, watchCounter.drain())
             }
         }
     }
     DisposableEffect(playbackKey) {
         onDispose {
-            if (pendingWatchSeconds > 0) {
-                state.reportWatch(state.selectedVideo?.id.orEmpty(), pos, pendingWatchSeconds)
-                pendingWatchSeconds = 0
-            }
+            val pending = watchCounter.drain()
+            if (pending > 0) state.reportWatch(state.selectedVideo?.id.orEmpty(), pos, pending)
         }
     }
     val english = subsEn.lastOrNull { it.startMs <= pos && it.endMs >= pos }
