@@ -192,25 +192,56 @@ private val shadowPhrases = listOf(
 
 @Composable
 private fun ShadowExercise() {
-    val tts = rememberSpeech()
+    val speech = rememberSpeech()
     var index by remember { mutableIntStateOf(0) }
-    var speed by remember { mutableFloatStateOf(0.85f) }
-    var practiced by remember { mutableIntStateOf(0) }
-    val phrase = shadowPhrases[index % shadowPhrases.size]
-    Text("Прослушайте фразу и повторите вслух", style = MaterialTheme.typography.titleMedium)
-    Spacer(Modifier.height(20.dp))
-    Text(phrase, style = MaterialTheme.typography.headlineSmall)
+    var slow by remember { mutableStateOf(false) }
+    var input by remember(index) { mutableStateOf("") }
+    var checked by remember(index) { mutableStateOf(false) }
+    val target = shadowPhrases[index % shadowPhrases.size]
+    val accuracy = ExerciseMetrics.similarity(input, target)
+    val distance = ExerciseMetrics.distance(input, target)
+
+    Text("Шаг 1. Прослушайте фразу", style = MaterialTheme.typography.titleMedium)
     Spacer(Modifier.height(12.dp))
-    Text("Скорость произношения")
-    Slider(value = speed, onValueChange = { speed = it }, valueRange = 0.5f..1.2f)
-    Button(onClick = { tts.speak(phrase, speed) }) {
-        Icon(Icons.Default.VolumeUp, null)
-        Text(" Прослушать")
+    ElevatedCard(Modifier.fillMaxWidth()) {
+        Text(target, style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.padding(16.dp))
     }
-    Spacer(Modifier.height(14.dp))
-    Text("Повторите вслед за диктором, затем переходите дальше.")
-    OutlinedButton(onClick = { index++; practiced++ }) { Text("Повторил · следующая фраза") }
-    Text("Практика: " + practiced)
+    Spacer(Modifier.height(12.dp))
+    Row(verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        FilledTonalButton(onClick = { speech.speak(target, if (slow) 0.55f else 0.85f) }) {
+            Icon(Icons.Default.VolumeUp, contentDescription = null)
+            Text(" Прослушать")
+        }
+        FilterChip(selected = slow, onClick = { slow = !slow },
+            label = { Text(if (slow) "Медленно" else "Обычно") })
+    }
+    Spacer(Modifier.height(24.dp))
+    Text("Шаг 2. Повторите вслух, затем впишите то, что произнесли",
+        style = MaterialTheme.typography.titleMedium)
+    OutlinedTextField(value = input,
+        onValueChange = { input = it; checked = false },
+        label = { Text("Произнесённая фраза") },
+        maxLines = 3, modifier = Modifier.fillMaxWidth())
+    Spacer(Modifier.height(12.dp))
+    Button(onClick = { checked = true }, enabled = input.isNotBlank(),
+        modifier = Modifier.fillMaxWidth()) { Text("Проверить") }
+    if (checked) {
+        Spacer(Modifier.height(16.dp))
+        val percentage = (accuracy * 100).toInt()
+        Text("Совпадение: " + percentage + "% · Ошибок: " + distance,
+            style = MaterialTheme.typography.titleLarge,
+            color = if (accuracy >= 0.85) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.error)
+        LinearProgressIndicator(progress = { accuracy.toFloat() },
+            modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(8.dp))
+        Text("Оригинал: " + target)
+        Button(onClick = { index++ }, modifier = Modifier.fillMaxWidth()) {
+            Text("Следующая фраза")
+        }
+    }
 }
 
 private val dictations = listOf(
