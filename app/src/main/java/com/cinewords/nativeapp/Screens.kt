@@ -300,29 +300,56 @@ fun DictionaryScreen(state: CineState) {
 fun AddWordDialog(state: CineState, onDismiss: () -> Unit, defaultWord: String = "",
     context: String = "") {
     val scope = rememberCoroutineScope()
+    val speech = rememberSpeech()
     var word by remember(defaultWord) { mutableStateOf(defaultWord) }
-    var translation by remember { mutableStateOf("") }
-    var phonetic by remember { mutableStateOf("") }
+    var translation by remember(defaultWord) { mutableStateOf("") }
+    var phonetic by remember(defaultWord) { mutableStateOf("") }
+    var definition by remember(defaultWord) { mutableStateOf("") }
     var type by remember { mutableStateOf("word") }
     var busy by remember { mutableStateOf(false) }
+    var lookupError by remember { mutableStateOf("") }
+
+    suspend fun fetchLookup(text: String) {
+        busy = true
+        lookupError = ""
+        try {
+            val found = state.api.lookup(text.trim())
+            // Never overwrite the user's typed translation when a late result arrives.
+            if (word.trim().equals(text.trim(), ignoreCase = true)) {
+                if (translation.isBlank()) translation = found.translation
+                if (phonetic.isBlank()) phonetic = found.phonetic
+                definition = found.definition
+            }
+        } catch (e: Exception) {
+            lookupError = e.message ?: "Словарь недоступен"
+        } finally { busy = false }
+    }
+
+    // Tapping an English word in a transcript or reader should open its definition.
+    LaunchedEffect(defaultWord) {
+        if (defaultWord.isNotBlank()) fetchLookup(defaultWord)
+    }
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Добавить в словарь") }, text = {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             OutlinedTextField(value = word, onValueChange = { word = it }, label = { Text("Слово / фраза") })
+            if (definition.isNotBlank()) Text(definition, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedTextField(value = translation, onValueChange = { translation = it },
                 label = { Text("Перевод") })
             OutlinedTextField(value = phonetic, onValueChange = { phonetic = it },
                 label = { Text("Транскрипция") })
-            TextButton(enabled = word.isNotBlank() && !busy, onClick = {
-                scope.launch {
-                    busy = true
-                    try {
-                        val found = state.api.lookup(word)
-                        translation = found.translation
-                        phonetic = found.phonetic
-                    } catch (e: Exception) { state.error = e.message.orEmpty() }
-                    finally { busy = false }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(enabled = word.isNotBlank() && !busy,
+                    onClick = { scope.launch { fetchLookup(word) } }) {
+                    Text(if (busy) "Поиск…" else "Обновить перевод")
                 }
-            }) { Text(if (busy) "Поиск…" else "Найти перевод и транскрипцию") }
+                IconButton(enabled = word.isNotBlank(), onClick = { speech.speak(word) }) {
+                    Icon(Icons.Default.VolumeUp, "Произнести")
+                }
+            }
+            if (lookupError.isNotBlank()) Text(lookupError,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall)
             Row {
                 FilterChip(selected = type == "word", onClick = { type = "word" },
                     label = { Text("Слово") })
