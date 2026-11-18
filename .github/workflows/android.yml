@@ -15,7 +15,23 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.10.2"
-      - run: gradle --no-daemon :app:assembleDebug :app:testDebugUnitTest
+      - name: Checkout original Flutter API configuration
+        uses: actions/checkout@v4
+        with:
+          repository: verge88/cinewords
+          ref: master
+          path: flutter-source
+          persist-credentials: false
+      - name: Import published Flutter client API keys
+        run: python3 tools/import_flutter_api_keys.py --source flutter-source
+      - name: Test API key importer
+        run: python3 -m unittest discover -s tools/tests -v
+      - name: Build APK and run Android unit tests
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          KINOPOISK_API_KEY: ${{ secrets.KINOPOISK_API_KEY }}
+          OPENSUBTITLES_API_KEY: ${{ secrets.OPENSUBTITLES_API_KEY }}
+        run: gradle --no-daemon :app:assembleDebug :app:testDebugUnitTest
       - name: Upload debug APK
         if: success()
         uses: actions/upload-artifact@v4

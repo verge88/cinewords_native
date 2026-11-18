@@ -11,7 +11,8 @@ val localProperties = Properties().apply {
     if (f.exists()) f.inputStream().use { load(it) }
 }
 fun secret(name: String): String =
-    (localProperties.getProperty(name) ?: System.getenv(name) ?: "").replace("\\", "\\\\").replace("\"", "\\\"")
+    (System.getenv(name)?.takeIf { it.isNotBlank() }
+        ?: localProperties.getProperty(name) ?: "").replace("\\", "\\\\").replace("\"", "\\\"")
 
 android {
     namespace = "com.cinewords.nativeapp"
@@ -28,6 +29,7 @@ android {
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"sb_publishable_wEbr1LTLfPQukwo8yT65fw_k-GQPD6f\"")
         buildConfigField("String", "YOUTUBE_API_KEY", "\"${secret("YOUTUBE_API_KEY")}\"")
         buildConfigField("String", "KINOPOISK_API_KEY", "\"${secret("KINOPOISK_API_KEY")}\"")
+        buildConfigField("String", "OPENSUBTITLES_API_KEY", "\"${secret("OPENSUBTITLES_API_KEY")}\"")
         buildConfigField("String", "DDGS_BASE_URL", "\"" +
             (secret("DDGS_BASE_URL").ifBlank { "http://10.0.2.2:4479" }) + "\"")
     }

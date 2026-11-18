@@ -138,6 +138,7 @@ object SubtitleParser {
 class CineApi(context: Context) {
     private val prefs = context.getSharedPreferences("cinewords_auth", Context.MODE_PRIVATE)
     private val http = OkHttpClient.Builder().callTimeout(20, TimeUnit.SECONDS).build()
+    private val openSubtitles = OpenSubtitlesApi()
     private val jsonType = "application/json; charset=utf-8".toMediaType()
     var token by mutableStateOf(prefs.getString("access_token", null))
         private set
@@ -338,12 +339,30 @@ class CineApi(context: Context) {
                 video.youtubeId.toIntOrNull() != null && video.sourceType in listOf("vidapi", "direct") ->
                     "https://cache.vdrk.site/v2/movie/" + video.youtubeId +
                         (if (lang == "ru") "/Russian.vtt" else "/English.vtt")
-                else -> return emptyList()
+                else -> ""
             }
         }
-        return runCatching {
-            SubtitleParser.parse(getText(remote), lang)
-        }.getOrDefault(emptyList())
+        if (remote.isNotBlank()) {
+            val subtitles = runCatching {
+                SubtitleParser.parse(getText(remote), lang)
+            }.getOrDefault(emptyList())
+            if (subtitles.isNotEmpty()) return subtitles
+        }
+        // OpenSubtitles from Flutter is the last resort for movies without
+        // working CDN subtitle URLs (search + one quota-consuming download).
+        val movie = video.sourceType == "vidapi" || video.id.startsWith("movie_") ||
+            OpenSubtitlesApi.imdbIdFromUrl(video.videoUrl) != null
+        if (movie) {
+            val captions = runCatching {
+                openSubtitles.fetchMovieSubtitles(
+                    tmdbId = video.youtubeId.toIntOrNull()?.takeIf { it > 0 },
+                    imdbId = OpenSubtitlesApi.imdbIdFromUrl(video.videoUrl),
+                    language = lang
+                )
+            }.getOrDefault(emptyList())
+            if (captions.isNotEmpty()) return captions
+        }
+        return emptyList()
     }
 
     /** Cache captions in the same Supabase subtitles table as the Flutter app. */

@@ -11,25 +11,40 @@ gradle :app:assembleDebug
 gradle :app:testDebugUnitTest
 ```
 
-В `local.properties` укажите путь к Android SDK и **свои** ключи, если нужны соответствующие каталоги:
+### API из Flutter-проекта
+
+В Flutter-репозитории уже настроены клиентские API-ключи **YouTube Data API v3**, **Kinopoisk.dev** и **OpenSubtitles.com**. Для нативного проекта есть автоматический импорт из Flutter-исходников без копирования значений в Git:
+
+```bash
+git clone https://github.com/verge88/cinewords.git ../cinewords
+python3 tools/import_flutter_api_keys.py --source ../cinewords
+gradle :app:assembleDebug
+```
+
+Скрипт читает `youtube_config.dart`, `kinopoisk_service.dart` и `open_subtitles_service.dart`, переносит клиентские значения по умолчанию в игнорируемый Git файл `local.properties`, **не выводит ключи** и сохраняет уже заданные настройки. `--force` заменит ранее указанные значения. Supabase URL и publishable key уже совпадают с Flutter; `service_role` и серверные секреты не импортируются.
+
+Параметры можно задать вручную:
 
 ```properties
 sdk.dir=/path/to/Android/Sdk
 YOUTUBE_API_KEY=...
 KINOPOISK_API_KEY=...
+OPENSUBTITLES_API_KEY=...
 DDGS_BASE_URL=http://10.0.2.2:4479
 ```
 
-Эти значения автоматически попадают в BuildConfig во время сборки. `local.properties` добавлен в `.gitignore`. Публичный Supabase URL и *publishable* key совпадают с Flutter-версией; данные аккаунта и словарь остаются в тех же таблицах.
+Переменные окружения (включая GitHub Actions Secrets) имеют приоритет над `local.properties`. В CI происходит checkout публичного Flutter-репозитория и импорт клиентских ключей **во время сборки**; значения ключей не добавляются в Git нативного проекта. После успешной сборки [GitHub Actions](https://github.com/verge88/cinewords_native/actions/workflows/android.yml) публикует `cinewords-native-debug-apk` и результаты тестов.
 
-После успешного запуска [GitHub Actions](https://github.com/verge88/cinewords_native/actions/workflows/android.yml) в артефактах workflow доступен `cinewords-native-debug-apk` (тестовая сборка для Android). Для воспроизведения YouTube и поиска Kinopoisk с вашими ключами необходимо собрать APK со своими `local.properties`; ключи не следует публиковать в репозитории.
+**Важно:** используемые во Flutter клиентские API-ключи уже опубликованы в исходном коде. Любые ключи, встроенные в APK, можно извлечь; это не безопасное хранилище секретов. Для приватных токенов нужен серверный прокси; для клиентских ключей желательно задать доступные ограничения в консоли API-провайдера. Квоты и ограничения на Android-пакет/подпись могут препятствовать использованию перенесённых ключей.
+
+OpenSubtitles теперь используется как запасной источник EN/RU субтитров для фильмов, если VDRK или другие дорожки недоступны. Скачивание может расходовать квоту OpenSubtitles.
 
 ## Реализовано
 
 - Авторизация/регистрация через Supabase, хранение и обновление сессии, выход.
 - Главная страница и каталог: избранное, поиск/пагинация YouTube Data API, видео из Supabase, поиск фильмов в Kinopoisk, каталог Internet Archive и DDGS-метапоиск (нужен запущенный DDGS API-сервер).
 - Страница видео; воспроизведение YouTube через iframe/WebView и прямых HLS/MP4 через Media3 ExoPlayer, публичные фильмы Internet Archive, попытка извлечь HLS через Rivestream и запасной сторонний iframe для фильмов.
-- EN/RU субтитры из Supabase, прямые SRT/VTT и VDRK для TMDB, автоматическое сохранение загруженных YouTube-дорожек в Supabase, синхронизация по позиции, настраиваемый EN/RU-оверлей поверх видео (с отступом и масштабом), транскрипт с переходом на таймкод, нажатие на слово для добавления в словарь.
+- EN/RU субтитры из Supabase, прямые SRT/VTT, VDRK и OpenSubtitles.com для фильмов, автоматическое сохранение загруженных YouTube-дорожек в Supabase, синхронизация по позиции, настраиваемый EN/RU-оверлей поверх видео (с отступом и масштабом), транскрипт с переходом на таймкод, нажатие на слово для добавления в словарь.
 - Словарь: фильтрация, поиск, слова и фразы, добавление, удаление, транскрипция/перевод, карточки SM-2 через существующий Supabase RPC.
 - 11 вариантов в разделе упражнений (включая карточки, семантические кластеры, определения, shadowing, диктант, минимальные пары, конструктор, времена, cloze, читалку и невидимые слова). TTS — системный Android.
 - Профиль, статистика, системная/светлая/тёмная/монохромная темы.
@@ -44,6 +59,8 @@ DDGS_BASE_URL=http://10.0.2.2:4479
 
 - `CineApi.kt` — модели, доступ к Supabase REST/Auth/RPC, YouTube, Kinopoisk, DDGS, Archive.org, Rivestream, словарь и парсер субтитров.
 - `YoutubeCaptions.kt` — получение captionTracks/json3 с YouTube watch page.
+- `OpenSubtitlesApi.kt` — поиск и скачивание запасных EN/RU субтитров для фильмов через OpenSubtitles REST API.
+- `tools/import_flutter_api_keys.py` — импорт клиентских API-конфигураций из Flutter без фиксации ключей в Git.
 - `CineState.kt` — общее состояние приложения и загрузка данных.
 - `MainActivity.kt` — приложение, темы и навигация.
 - `Screens.kt` — каталог, профиль, словарь и SRS.
