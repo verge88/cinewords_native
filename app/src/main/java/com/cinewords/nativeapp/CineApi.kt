@@ -164,9 +164,10 @@ class CineApi(context: Context) {
         withContext(Dispatchers.IO) {
             val request = Request.Builder().url(url)
                 .header("apikey", BuildConfig.SUPABASE_ANON_KEY)
-                .header("Authorization", "Bearer " +
-                    (if (anonymous) BuildConfig.SUPABASE_ANON_KEY else (token ?: BuildConfig.SUPABASE_ANON_KEY)))
                 .header("Accept", "application/json")
+            // Supabase publishable keys are NOT JWTs: send them as apikey only.
+            if (!anonymous && !token.isNullOrBlank())
+                request.header("Authorization", "Bearer " + token)
             headers.forEach { (k, v) -> request.header(k, v) }
             if (method != "GET") request.method(method, (body?.toString() ?: "").toRequestBody(jsonType))
             http.newCall(request.build()).execute().use { response ->
@@ -236,7 +237,12 @@ class CineApi(context: Context) {
             "order" to "view_count.desc", "limit" to "40"))).objects().map(Video::from)
 
     suspend fun saveVideo(video: Video): Video {
-        val j = JSONObject().put("youtube_id", video.youtubeId).put("title", video.title)
+        val sourceId = video.youtubeId.ifBlank {
+            "custom_" + java.security.MessageDigest.getInstance("SHA-256")
+                .digest(video.videoUrl.toByteArray(Charsets.UTF_8))
+                .take(10).joinToString("") { "%02x".format(it) }
+        }
+        val j = JSONObject().put("youtube_id", sourceId).put("title", video.title)
             .put("thumbnail_url", video.thumbnail).put("channel_name", video.channel)
             .put("description", video.description)
             .put("duration_sec", video.durationSec)
