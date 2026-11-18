@@ -420,6 +420,8 @@ fun ReviewScreen(state: CineState) {
 fun ProfileScreen(state: CineState) {
     val scope = rememberCoroutineScope()
     val p = state.profile
+    var editGoal by remember { mutableStateOf(false) }
+    var confirmSignOut by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
         Header("Профиль", p.email)
         ElevatedCard(Modifier.fillMaxWidth()) {
@@ -438,6 +440,7 @@ fun ProfileScreen(state: CineState) {
         Text("Выучено слов: " + p.learned)
         Text("Просмотрено минут: " + p.minutes)
         Text("Карточек в словаре: " + state.words.size)
+        TextButton(onClick = { editGoal = true }) { Text("Изменить дневную цель: " + p.goal + " мин") }
         Spacer(Modifier.height(20.dp))
         Text("Оформление", style = MaterialTheme.typography.titleLarge)
         listOf("system" to "Системная", "light" to "Светлая",
@@ -453,8 +456,45 @@ fun ProfileScreen(state: CineState) {
             state.route = "catalog"
             scope.launch { state.browse("favorites") }
         }) { Text("Избранное") }
-        OutlinedButton(onClick = {
-            scope.launch { state.api.signOut(); state.reset() }
-        }) { Text("Выйти") }
+        OutlinedButton(onClick = { confirmSignOut = true }) { Text("Выйти") }
+    }
+    if (editGoal) {
+        var goal by remember(p.goal) { mutableFloatStateOf(p.goal.toFloat()) }
+        AlertDialog(onDismissRequest = { editGoal = false }, title = { Text("Дневная цель") },
+            text = {
+                Column {
+                    Text(goal.toInt().toString() + " минут в день")
+                    Slider(value = goal, onValueChange = { goal = it },
+                        valueRange = 5f..120f, steps = 22)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch {
+                        try {
+                            state.api.setDailyGoal(goal.toInt())
+                            state.loadProfile()
+                            editGoal = false
+                        } catch (e: Exception) { state.error = e.message.orEmpty() }
+                    }
+                }) { Text("Сохранить") }
+            },
+            dismissButton = {
+                TextButton(onClick = { editGoal = false }) { Text("Отмена") }
+            })
+    }
+    if (confirmSignOut) {
+        AlertDialog(onDismissRequest = { confirmSignOut = false },
+            title = { Text("Выйти из аккаунта?") },
+            text = { Text("Для повторного входа потребуются email и пароль.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmSignOut = false
+                    scope.launch { state.api.signOut(); state.reset() }
+                }) { Text("Выйти") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmSignOut = false }) { Text("Отмена") }
+            })
     }
 }

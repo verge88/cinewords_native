@@ -349,6 +349,13 @@ class CineApi(context: Context) {
             day?.optInt("minutes_watched") ?: 0)
     }
 
+    suspend fun setDailyGoal(minutes: Int) {
+        require(minutes in 5..120) { "Цель должна быть от 5 до 120 минут" }
+        val id = requireNotNull(userId)
+        table("profiles", mapOf("id" to "eq.$id"),
+            "PATCH", JSONObject().put("daily_goal_minutes", minutes))
+    }
+
     suspend fun logWatch(videoId: String, positionMs: Long, watchedSec: Int) {
         if (!Regex("^[0-9a-fA-F-]{36}$").matches(videoId) || watchedSec <= 0) return
         runCatching {
