@@ -30,7 +30,7 @@ class CineState(context: Context) {
     var profile by mutableStateOf(Profile())
 
     fun openVideo(video: Video) { selectedVideo = video; route = "video_detail" }
-    fun setTheme(mode: String) {
+    fun chooseTheme(mode: String) {
         theme = mode
         prefs.edit().putString("preferred_theme_mode", mode).apply()
     }
@@ -78,6 +78,7 @@ class CineState(context: Context) {
             }
             "library" -> results.replace(api.searchLibrary(query))
             "movies" -> movies.replace(api.movies(query))
+            "archive" -> results.replace(api.archiveVideos(query))
             "favorites" -> reloadFavorites()
         }
     }
@@ -88,6 +89,7 @@ class CineState(context: Context) {
         when (tab) {
             "favorites" -> safe { reloadFavorites() }
             "movies" -> safe { movies.replace(api.movies("")) }
+            "archive" -> safe { results.replace(api.archiveVideos("")) }
             "youtube" -> safe {
                 val (items, next) = api.youtube("learn english conversation")
                 results.replace(items)

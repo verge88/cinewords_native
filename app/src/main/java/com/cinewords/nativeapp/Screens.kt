@@ -95,7 +95,7 @@ fun CatalogScreen(state: CineState) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.horizontalScroll(rememberScrollState())) {
             listOf("youtube" to "YouTube", "library" to "Медиатека",
-                "movies" to "Фильмы", "favorites" to "Избранное").forEach { (id, label) ->
+                "movies" to "Фильмы", "archive" to "Архив", "favorites" to "Избранное").forEach { (id, label) ->
                 FilterChip(selected = state.browseTab == id,
                     onClick = { scope.launch { state.browse(id) } }, label = { Text(label) })
             }
@@ -207,7 +207,18 @@ fun VideoDetailScreen(state: CineState) {
         Text(video.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text(video.channel, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(16.dp))
-        Button(onClick = { state.route = "player" }, modifier = Modifier.fillMaxWidth()) {
+        Button(onClick = {
+            scope.launch {
+                try {
+                    state.selectedVideo = when (video.sourceType) {
+                        "archive" -> state.api.resolveArchive(video)
+                        "vidapi" -> state.api.resolveMovie(video)
+                        else -> video
+                    }
+                    state.route = "player"
+                } catch (e: Exception) { state.error = e.message.orEmpty() }
+            }
+        }, modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Default.PlayArrow, null)
             Spacer(Modifier.width(8.dp))
             Text("Смотреть")
@@ -427,9 +438,9 @@ fun ProfileScreen(state: CineState) {
         Text("Оформление", style = MaterialTheme.typography.titleLarge)
         listOf("system" to "Системная", "light" to "Светлая",
             "dark" to "Тёмная", "monochrome" to "Монохромная").forEach { (id, title) ->
-            Row(Modifier.fillMaxWidth().clickable { state.setTheme(id) }.padding(vertical = 8.dp),
+            Row(Modifier.fillMaxWidth().clickable { state.chooseTheme(id) }.padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(selected = state.theme == id, onClick = { state.setTheme(id) })
+                RadioButton(selected = state.theme == id, onClick = { state.chooseTheme(id) })
                 Text(title)
             }
         }

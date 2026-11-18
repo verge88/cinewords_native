@@ -21,7 +21,8 @@ data class Video(
     val thumbnail: String = "", val channel: String = "", val description: String = "",
     val durationSec: Int = 0, val difficulty: String = "intermediate",
     val category: String = "general", val sourceType: String = "youtube",
-    val videoUrl: String = "", val subtitleUrl: String = "", val subtitleUrlRu: String = ""
+    val videoUrl: String = "", val subtitleUrl: String = "", val subtitleUrlRu: String = "",
+    val httpHeaders: Map<String, String> = emptyMap()
 ) {
     companion object {
         fun from(j: JSONObject) = Video(
@@ -92,13 +93,17 @@ fun extractYouTubeId(input: String): String {
     val trimmed = input.trim()
     if (Regex("^[A-Za-z0-9_-]{11}$").matches(trimmed)) return trimmed
     return try {
-        val uri = android.net.Uri.parse(trimmed)
-        val id = uri.getQueryParameter("v")
-        if (!id.isNullOrEmpty()) id else {
-            val segments = uri.pathSegments
-            if (uri.host?.contains("youtu.be") == true) segments.firstOrNull().orEmpty()
-            else segments.getOrNull(segments.indexOfFirst { it in listOf("embed", "shorts", "live") } + 1)
-                ?.takeIf { it != segments.firstOrNull() } ?: trimmed
+        val uri = java.net.URI(trimmed)
+        val segments = uri.path.orEmpty().trim('/').split('/').filter { it.isNotBlank() }
+        val videoQuery = uri.rawQuery.orEmpty().split('&')
+            .firstOrNull { it.substringBefore('=') == "v" }?.substringAfter('=', "")
+        when {
+            !videoQuery.isNullOrBlank() -> java.net.URLDecoder.decode(videoQuery, "UTF-8")
+            uri.host?.contains("youtu.be") == true -> segments.firstOrNull().orEmpty()
+            else -> {
+                val ix = segments.indexOfFirst { it in listOf("embed", "shorts", "live") }
+                if (ix >= 0) segments.getOrNull(ix + 1) ?: trimmed else trimmed
+            }
         }
     } catch (_: Exception) { trimmed }
 }
@@ -308,9 +313,14 @@ class CineApi(context: Context) {
         }
         val url = if (lang == "ru") video.subtitleUrlRu else video.subtitleUrl
         val remote = url.ifBlank {
-            if (video.sourceType == "youtube" && video.youtubeId.isNotBlank())
-                "https://www.youtube.com/api/timedtext?v=" + video.youtubeId + "&lang=" + lang + "&fmt=vtt"
-            else return emptyList()
+            when {
+                video.sourceType == "youtube" && video.youtubeId.isNotBlank() ->
+                    "https://www.youtube.com/api/timedtext?v=" + video.youtubeId + "&lang=" + lang + "&fmt=vtt"
+                video.youtubeId.toIntOrNull() != null && video.sourceType in listOf("vidapi", "direct") ->
+                    "https://cache.vdrk.site/v2/movie/" + video.youtubeId +
+                        (if (lang == "ru") "/Russian.vtt" else "/English.vtt")
+                else -> return emptyList()
+            }
         }
         return runCatching {
             SubtitleParser.parse(getText(remote), lang)
@@ -404,6 +414,109 @@ class CineApi(context: Context) {
         val j = JSONObject(getText(url.build().toString(),
             mapOf("X-API-KEY" to BuildConfig.KINOPOISK_API_KEY)))
         return j.optJSONArray("docs")?.objects()?.map(Movie::from).orEmpty()
+    }
+
+
+    /** Public-domain Internet Archive film catalog, matching the Flutter ArchiveOrgService. */
+    suspend fun archiveVideos(query: String): List<Video> {
+        val q = if (query.isBlank())
+            "collection:(feature_films) AND mediatype:(movies) AND format:(MPEG4)"
+        else "mediatype:(movies) AND format:(MPEG4) AND title:(" +
+            query.replace("\"", "") + ")"
+        val url = "https://archive.org/advancedsearch.php".toHttpUrl().newBuilder()
+            .addQueryParameter("q", q)
+            .addQueryParameter("fl[]", "identifier")
+            .addQueryParameter("fl[]", "title")
+            .addQueryParameter("fl[]", "description")
+            .addQueryParameter("sort[]", "downloads desc")
+            .addQueryParameter("rows", "30")
+            .addQueryParameter("page", "1")
+            .addQueryParameter("output", "json").build().toString()
+        val docs = JSONObject(getText(url)).optJSONObject("response")
+            ?.optJSONArray("docs")?.objects().orEmpty()
+        return docs.mapNotNull { item ->
+            val id = item.optString("identifier")
+            if (id.isBlank()) null else Video(
+                youtubeId = id, title = item.optString("title", id),
+                thumbnail = "https://archive.org/services/img/" + id,
+                description = item.optString("description"),
+                sourceType = "archive", category = "movies"
+            )
+        }
+    }
+
+    /** Resolve a playable Internet Archive MP4 and optional external captions. */
+    suspend fun resolveArchive(video: Video): Video {
+        val id = video.youtubeId
+        require(id.isNotBlank()) { "Archive identifier is missing" }
+        val files = JSONObject(getText("https://archive.org/metadata/" +
+            URLEncoder.encode(id, "UTF-8"))).optJSONArray("files")?.objects().orEmpty()
+        val best = files.filter {
+            val name = it.optString("name").lowercase()
+            name.endsWith(".mp4") || name.endsWith(".m4v")
+        }.maxByOrNull { it.optString("size").toLongOrNull() ?: 0 }
+            ?: throw IllegalStateException("В архиве нет воспроизводимого MP4")
+        val subtitle = files.firstOrNull {
+            val name = it.optString("name").lowercase()
+            name.endsWith(".srt") || name.endsWith(".vtt")
+        }
+        fun fileUrl(name: String) = "https://archive.org/download/" + id + "/" +
+            URLEncoder.encode(name, "UTF-8").replace("+", "%20")
+        return video.copy(sourceType = "direct", videoUrl = fileUrl(best.optString("name")),
+            subtitleUrl = subtitle?.optString("name")?.let(::fileUrl).orEmpty())
+    }
+
+    /** Rivestream is optional: if unavailable, keep the existing movie embed fallback. */
+    suspend fun resolveMovie(video: Video): Video {
+        val tmdbId = video.youtubeId.toIntOrNull() ?: return video
+        if (tmdbId <= 0) return video
+        val providers = runCatching {
+            JSONObject(getText("https://scrapper.rivestream.org/api/providers"))
+                .optJSONArray("data")?.let { j ->
+                    (0 until j.length()).mapNotNull { j.optString(it).takeIf(String::isNotBlank) }
+                }.orEmpty()
+        }.getOrDefault(emptyList())
+        val candidates = listOf("asiacloud", "primevids", "flowcast", "guru") +
+            providers.filterNot { it in listOf("asiacloud", "primevids", "flowcast", "guru") }
+        for (provider in candidates.distinct().take(8)) {
+            if (provider !in providers) continue
+            val result = runCatching {
+                val url = "https://scrapper.rivestream.org/api/provider".toHttpUrl().newBuilder()
+                    .addQueryParameter("provider", provider).addQueryParameter("id", tmdbId.toString())
+                    .build().toString()
+                JSONObject(getText(url)).optJSONObject("data")
+            }.getOrNull() ?: continue
+            val candidatesSources = result.optJSONArray("sources")?.objects().orEmpty()
+            val badLang = listOf("hindi", "tamil", "telugu", "urdu", "vietnamese", "vietsub")
+            val source = candidatesSources.filter {
+                val label = it.optString("quality").lowercase()
+                it.optString("url").isNotBlank() && badLang.none { lang -> label.contains(lang) }
+            }.sortedBy {
+                val label = it.optString("quality").lowercase()
+                if ("english" in label || "original" in label) 0
+                else if ("hls" in label || ".m3u8" in it.optString("url")) 1
+                else 2
+            }.firstOrNull() ?: continue
+            val raw = source.optString("url")
+            val parsed = android.net.Uri.parse(raw)
+            val resolvedUrl = parsed.getQueryParameter("url") ?: raw
+            if (!resolvedUrl.startsWith("https://")) continue
+            val upstreamHeaders = parsed.getQueryParameter("headers")?.let {
+                runCatching { JSONObject(it) }.getOrNull()
+            }
+            val referer = upstreamHeaders?.optString("Referer")
+                ?.ifBlank { upstreamHeaders.optString("referer") }.orEmpty()
+            val captions = result.optJSONArray("captions")?.objects().orEmpty()
+            fun subtitle(lang: String): String = captions.firstOrNull {
+                val label = it.optString("label", it.optString("lang")).lowercase()
+                if (lang == "en") "english" in label || label == "en"
+                else "russian" in label || label == "ru"
+            }?.let { it.optString("file", it.optString("url")) }.orEmpty()
+            return video.copy(sourceType = "direct", videoUrl = resolvedUrl,
+                subtitleUrl = subtitle("en"), subtitleUrlRu = subtitle("ru"),
+                httpHeaders = if (referer.isBlank()) emptyMap() else mapOf("Referer" to referer))
+        }
+        return video
     }
 
     suspend fun lookup(word: String): Lookup {

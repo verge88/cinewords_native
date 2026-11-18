@@ -24,6 +24,9 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -59,7 +62,11 @@ fun PlayerScreen(state: CineState) {
     val direct = video.sourceType == "direct" && video.videoUrl.isNotBlank()
     val youtube = video.sourceType == "youtube" && video.youtubeId.isNotBlank()
     val player = remember(video) {
-        if (direct) ExoPlayer.Builder(context).build().apply {
+        if (direct) ExoPlayer.Builder(context)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(
+                DefaultDataSource.Factory(context,
+                    DefaultHttpDataSource.Factory().setDefaultRequestProperties(video.httpHeaders))))
+            .build().apply {
             setMediaItem(MediaItem.fromUri(video.videoUrl))
             prepare()
             playWhenReady = true
