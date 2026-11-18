@@ -3,13 +3,16 @@ package com.cinewords.nativeapp
 import android.annotation.SuppressLint
 import android.os.Handler
 import android.os.Looper
+import android.view.LayoutInflater
 import android.speech.tts.TextToSpeech
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -17,6 +20,8 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
@@ -61,6 +66,8 @@ fun PlayerScreen(state: CineState) {
     var speed by remember(playbackKey) { mutableFloatStateOf(1.0f) }
     var showRu by remember(playbackKey) { mutableStateOf(true) }
     var showOnScreen by remember(playbackKey) { mutableStateOf(true) }
+    var overlaySubtitles by remember(playbackKey) { mutableStateOf(true) }
+    var subtitleOffset by remember(playbackKey) { mutableFloatStateOf(6f) }
     var scale by remember(playbackKey) { mutableFloatStateOf(1.0f) }
     var selectedWord by remember { mutableStateOf("") }
     var shownSettings by remember { mutableStateOf(false) }
@@ -129,6 +136,8 @@ fun PlayerScreen(state: CineState) {
     }
     val english = subsEn.lastOrNull { it.startMs <= pos && it.endMs >= pos }
     val russian = subsRu.lastOrNull { it.startMs <= pos && it.endMs >= pos }
+    val activeTranslation = if (russian != null) russian.text
+        else english?.let { translatedLines[it.startMs] }
     val progress = if (duration > 0) (pos.toFloat() / duration).coerceIn(0f, 1f) else 0f
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
@@ -141,40 +150,66 @@ fun PlayerScreen(state: CineState) {
                 Icon(Icons.Default.Settings, "Настройки")
             }
         }
-        if (direct && player != null) {
-            AndroidView(factory = { ctx ->
-                PlayerView(ctx).apply { this.player = player }
-            }, modifier = Modifier.fillMaxWidth().aspectRatio(16 / 9f))
-        } else if (youtube) {
-            AndroidView(factory = { ctx ->
-                WebView(ctx).apply {
-                    settings.javaScriptEnabled = true
-                    settings.domStorageEnabled = true
-                    settings.mediaPlaybackRequiresUserGesture = false
-                    webChromeClient = WebChromeClient()
-                    webViewClient = WebViewClient()
-                    addJavascriptInterface(YoutubeTimeBridge { position, playing ->
-                        pos = position
-                        youtubeIsPlaying = playing
-                    }, "CineBridge")
-                    loadDataWithBaseURL("https://www.youtube.com", youtubeHtml(video.youtubeId),
-                        "text/html", "UTF-8", null)
-                    webView = this
+        Box(Modifier.fillMaxWidth().aspectRatio(16 / 9f)) {
+            if (direct && player != null) {
+                AndroidView(factory = { ctx ->
+                    (LayoutInflater.from(ctx).inflate(R.layout.cinewords_player_view, null)
+                        as PlayerView).apply { this.player = player }
+                }, modifier = Modifier.fillMaxSize())
+            } else if (youtube) {
+                AndroidView(factory = { ctx ->
+                    WebView(ctx).apply {
+                        settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
+                        settings.mediaPlaybackRequiresUserGesture = false
+                        webChromeClient = WebChromeClient()
+                        webViewClient = WebViewClient()
+                        addJavascriptInterface(YoutubeTimeBridge { position, playing ->
+                            pos = position
+                            youtubeIsPlaying = playing
+                        }, "CineBridge")
+                        loadDataWithBaseURL("https://www.youtube.com", youtubeHtml(video.youtubeId),
+                            "text/html", "UTF-8", null)
+                        webView = this
+                    }
+                }, modifier = Modifier.fillMaxSize())
+            } else if (video.videoUrl.isNotBlank()) {
+                AndroidView(factory = { ctx ->
+                    WebView(ctx).apply {
+                        settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
+                        webChromeClient = WebChromeClient()
+                        webViewClient = WebViewClient()
+                        // Never inject the YouTube JavaScript bridge into external web pages.
+                        loadUrl(video.videoUrl)
+                        webView = this
+                    }
+                }, modifier = Modifier.fillMaxSize())
+            } else Text("Источник видео не задан")
+            if (overlaySubtitles && showOnScreen &&
+                (english != null || (showRu && !activeTranslation.isNullOrBlank()))) {
+                Column(
+                    Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                        .padding(start = 6.dp, end = 6.dp, bottom = subtitleOffset.dp)
+                        .background(Color.Black.copy(alpha = 0.72f), RoundedCornerShape(10.dp))
+                        .padding(6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    if (english != null) {
+                        WordFlow(text = english.text, scale = scale, textColor = Color.White) { word ->
+                            selectedWord = word
+                        }
+                    }
+                    if (showRu && !activeTranslation.isNullOrBlank()) {
+                        Text(activeTranslation,
+                            color = Color.White,
+                            textAlign = TextAlign.Center,
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontSize = MaterialTheme.typography.bodyMedium.fontSize * scale))
+                    }
                 }
-            }, modifier = Modifier.fillMaxWidth().aspectRatio(16 / 9f))
-        } else if (video.videoUrl.isNotBlank()) {
-            AndroidView(factory = { ctx ->
-                WebView(ctx).apply {
-                    settings.javaScriptEnabled = true
-                    settings.domStorageEnabled = true
-                    webChromeClient = WebChromeClient()
-                    webViewClient = WebViewClient()
-                    // No JavascriptInterface on third-party embeds.
-                    loadUrl(video.videoUrl)
-                    webView = this
-                }
-            }, modifier = Modifier.fillMaxWidth().aspectRatio(16 / 9f))
-        } else Text("Источник видео не задан")
+            }
+        }
         Spacer(Modifier.height(8.dp))
         if (direct || youtube) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -203,6 +238,15 @@ fun PlayerScreen(state: CineState) {
                         Text("Русский перевод", Modifier.weight(1f))
                         Switch(checked = showRu, onCheckedChange = { showRu = it })
                     }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Субтитры поверх видео", Modifier.weight(1f))
+                        Switch(checked = overlaySubtitles, onCheckedChange = { overlaySubtitles = it })
+                    }
+                    if (overlaySubtitles) {
+                        Text("Отступ снизу")
+                        Slider(value = subtitleOffset, onValueChange = { subtitleOffset = it },
+                            valueRange = 0f..50f)
+                    }
                     Text("Размер субтитров")
                     Slider(value = scale, onValueChange = { scale = it }, valueRange = 0.7f..1.7f)
                     Text("Скорость: " + speed)
@@ -221,12 +265,11 @@ fun PlayerScreen(state: CineState) {
         if (showOnScreen) {
             Spacer(Modifier.height(12.dp))
             Text("Субтитры", style = MaterialTheme.typography.titleMedium)
-            if (english != null) {
+            if (!overlaySubtitles && english != null) {
                 WordFlow(text = english.text, scale = scale) { word -> selectedWord = word }
             }
-            val translation = if (russian != null) russian.text
-                else english?.let { translatedLines[it.startMs] }
-            if (showRu && !translation.isNullOrBlank()) {
+            val translation = activeTranslation
+            if (!overlaySubtitles && showRu && !translation.isNullOrBlank()) {
                 Text(translation, style = MaterialTheme.typography.bodyLarge.copy(
                     fontSize = MaterialTheme.typography.bodyLarge.fontSize * scale),
                     color = MaterialTheme.colorScheme.primary)
@@ -300,7 +343,7 @@ fun PlayerScreen(state: CineState) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun WordFlow(text: String, scale: Float = 1.0f, onWord: (String) -> Unit) {
+fun WordFlow(text: String, scale: Float = 1.0f, textColor: Color? = null, onWord: (String) -> Unit) {
     val tokens = remember(text) { Regex("""[A-Za-z]+(?:['-][A-Za-z]+)*|[^A-Za-z]+""").findAll(text)
         .map { it.value }.toList() }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(3.dp),
@@ -310,9 +353,10 @@ fun WordFlow(text: String, scale: Float = 1.0f, onWord: (String) -> Unit) {
                 Text(token, modifier = Modifier.clickable { onWord(token) },
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontSize = MaterialTheme.typography.titleMedium.fontSize * scale),
-                    color = MaterialTheme.colorScheme.primary)
+                    color = textColor ?: MaterialTheme.colorScheme.primary)
             } else Text(token, style = MaterialTheme.typography.titleMedium.copy(
-                fontSize = MaterialTheme.typography.titleMedium.fontSize * scale))
+                fontSize = MaterialTheme.typography.titleMedium.fontSize * scale),
+                color = textColor ?: MaterialTheme.colorScheme.onSurface)
         }
     }
 }
