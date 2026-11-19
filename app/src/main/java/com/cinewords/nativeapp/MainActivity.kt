@@ -18,6 +18,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -112,7 +114,7 @@ private fun CineApp(state: CineState) {
                 "catalog", "movies" -> CatalogScreen(state)
                 "dictionary" -> DictionaryScreen(state)
                 "exercises" -> ExercisesHub(state)
-                "profile" -> ProfileScreen(state)
+                "profile" -> CineProfileScreen(state)
                 "video_detail" -> VideoDetailScreen(state)
                 "player" -> PlayerScreen(state)
                 "review" -> ReviewScreen(state)
@@ -133,41 +135,81 @@ private fun AuthScreen(state: CineState) {
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var visiblePassword by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-        verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+        .padding(horizontal = 28.dp),
+        horizontalAlignment = Alignment.CenterHorizontally) {
+        Spacer(Modifier.height(60.dp))
         Image(painter = painterResource(R.drawable.splash_logo),
-            contentDescription = "CineWords", modifier = Modifier.size(92.dp))
-        Spacer(Modifier.height(16.dp))
-        Text("CineWords", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-        Text("Изучайте английский по фильмам и видео",
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
+            contentDescription = "CineWords", modifier = Modifier.size(88.dp))
         Spacer(Modifier.height(32.dp))
-        if (register) OutlinedTextField(value = name, onValueChange = { name = it },
-            label = { Text("Ваше имя") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        Text(if (register) "Create Account" else "Welcome back!",
+            style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.ExtraBold,
+            textAlign = TextAlign.Center)
+        Spacer(Modifier.height(8.dp))
+        Text(if (register) "Start learning with videos" else "Sign in to continue learning",
+            style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(48.dp))
+        if (register) {
+            OutlinedTextField(value = name, onValueChange = { name = it },
+                leadingIcon = { Icon(Icons.Default.PersonOutline, null) },
+                label = { Text("Full Name") }, modifier = Modifier.fillMaxWidth(),
+                singleLine = true, shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
+            Spacer(Modifier.height(16.dp))
+        }
         OutlinedTextField(value = email, onValueChange = { email = it },
-            label = { Text("Email") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-        OutlinedTextField(value = password, onValueChange = { password = it },
-            label = { Text("Пароль") }, visualTransformation = PasswordVisualTransformation(),
-            modifier = Modifier.fillMaxWidth(), singleLine = true)
+            leadingIcon = { Icon(Icons.Default.Email, null,
+                tint = MaterialTheme.colorScheme.primary) },
+            label = { Text("Email") }, modifier = Modifier.fillMaxWidth(),
+            singleLine = true, shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
         Spacer(Modifier.height(16.dp))
-        Button(enabled = !busy && email.isNotBlank() && password.length >= 6,
-            modifier = Modifier.fillMaxWidth(), onClick = {
+        OutlinedTextField(value = password, onValueChange = { password = it },
+            leadingIcon = { Icon(Icons.Default.LockOutline, null,
+                tint = MaterialTheme.colorScheme.primary) },
+            trailingIcon = {
+                IconButton(onClick = { visiblePassword = !visiblePassword }) {
+                    Icon(if (visiblePassword) Icons.Default.Visibility
+                        else Icons.Default.VisibilityOff, "Показать пароль")
+                }
+            },
+            label = { Text("Password") },
+            visualTransformation = if (visiblePassword) VisualTransformation.None
+                else PasswordVisualTransformation(),
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true, shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
+        if (message.isNotBlank()) {
+            Spacer(Modifier.height(12.dp))
+            Text(message, color = MaterialTheme.colorScheme.error)
+        }
+        Spacer(Modifier.height(32.dp))
+        Button(enabled = !busy && email.contains("@") && password.length >= 6 &&
+                (!register || name.isNotBlank()),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+            onClick = {
                 scope.launch {
                     busy = true
                     try {
                         if (register) {
-                            val signedIn = state.api.signUp(email.trim(), password, name)
+                            val signedIn = state.api.signUp(email.trim(), password, name.trim())
                             if (!signedIn) message = "Подтвердите email, затем войдите"
                         } else state.api.signIn(email.trim(), password)
                     } catch (e: Exception) { message = e.message.orEmpty() }
                     finally { busy = false }
                 }
-            }) { Text(if (register) "Зарегистрироваться" else "Войти") }
-        TextButton(onClick = { register = !register; message = "" }) {
-            Text(if (register) "Уже есть аккаунт? Войти" else "Нет аккаунта? Регистрация")
+            }) {
+            if (busy) CircularProgressIndicator(modifier = Modifier.size(20.dp),
+                strokeWidth = 2.dp)
+            else Text(if (register) "Create Account" else "Sign In")
         }
-        if (message.isNotBlank()) Text(message, color = MaterialTheme.colorScheme.error)
+        Spacer(Modifier.height(16.dp))
+        OutlinedButton(onClick = {
+            register = !register; message = ""
+        }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
+            Text(if (register) "Sign In" else "Create Account")
+        }
+        Spacer(Modifier.height(40.dp))
     }
 }

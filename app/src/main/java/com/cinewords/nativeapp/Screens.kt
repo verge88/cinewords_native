@@ -277,56 +277,132 @@ fun VideoDetailScreen(state: CineState) {
 fun DictionaryScreen(state: CineState) {
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
-    var filter by remember { mutableStateOf("all") }
+    var type by remember { mutableStateOf("word") }
+    var tab by remember { mutableStateOf("all") }
     var addDialog by remember { mutableStateOf(false) }
-    val due = state.words.count { it.status != "mastered" &&
-        (it.nextReviewAt.isBlank() ||
-            runCatching { Instant.parse(it.nextReviewAt).isBefore(Instant.now().plusSeconds(300)) }.getOrDefault(false)) }
-    val filtered = state.words.filter {
-        (filter == "all" || it.type == filter || it.status == filter) &&
-            (query.isBlank() || it.word.contains(query, true) || it.translation.contains(query, true))
+    val list = state.words.filter { it.type == type }
+    val shown = list.filter { card ->
+        val matchTab = when (tab) {
+            "new" -> card.status == "new"
+            "learning" -> card.status in listOf("learning", "review")
+            "mastered" -> card.status == "mastered"
+            else -> true
+        }
+        matchTab && (query.isBlank() || card.word.contains(query, ignoreCase = true) ||
+            card.translation.contains(query, ignoreCase = true))
     }
+    val due = state.words.count { it.status != "mastered" &&
+        (it.nextReviewAt.isBlank() || runCatching {
+            Instant.parse(it.nextReviewAt).isBefore(Instant.now())
+        }.getOrDefault(false)) }
     Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-            Header("Мой словарь", state.words.size.toString() + " карточек · " + due + " к повторению")
-            Button(onClick = { state.route = "review" }, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Default.Style, null); Text(" Интервальное повторение")
-            }
-            OutlinedTextField(value = query, onValueChange = { query = it },
-                label = { Text("Найти слово") }, modifier = Modifier.fillMaxWidth())
-            Row(Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf("all" to "Все", "word" to "Слова", "phrase" to "Фразы",
-                    "new" to "Новые", "learning" to "Учу", "mastered" to "Выучены").forEach { (id, label) ->
-                    FilterChip(selected = filter == id, onClick = { filter = id }, label = { Text(label) })
+        Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Vocabulary", style = MaterialTheme.typography.headlineMedium,
+                    modifier = Modifier.weight(1f))
+                IconButton(onClick = { state.route = "exercises" }) {
+                    Icon(Icons.Default.FitnessCenter, "Упражнения")
+                }
+                IconButton(onClick = { addDialog = true }) {
+                    Icon(Icons.Default.MenuBook, "Добавить слово")
+                }
+                FilledTonalButton(onClick = { state.route = "review" }) {
+                    Icon(Icons.Default.School, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(if (due > 0) "Review ($due)" else "Practice")
                 }
             }
-            LazyColumn(contentPadding = PaddingValues(bottom = 90.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(filtered) { word ->
-                    Card(Modifier.fillMaxWidth().clickable {
-                        state.selectedWord = word
-                        state.route = "word_detail"
-                    }) {
-                        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(word.word, fontWeight = FontWeight.Bold)
-                                Text(word.translation, style = MaterialTheme.typography.bodyMedium)
-                                Text(word.status + " · " + word.type,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    style = MaterialTheme.typography.labelSmall)
-                            }
-                            IconButton(onClick = { scope.launch { state.deleteWord(word) } }) {
-                                Icon(Icons.Default.DeleteOutline, "Удалить")
-                            }
+            Spacer(Modifier.height(12.dp))
+            Row(Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(
+                    Triple("New", list.count { it.status == "new" }, CineColors.Coral),
+                    Triple("Learning", list.count { it.status == "learning" }, CineColors.Violet),
+                    Triple("Review", list.count { it.status == "review" }, CineColors.Amber),
+                    Triple("Mastered", list.count { it.status == "mastered" }, CineColors.Teal)
+                ).forEach { (label, count, color) ->
+                    Card(colors = CardDefaults.cardColors(
+                        containerColor = color.copy(alpha = 0.10f)),
+                        shape = RoundedCornerShape(14.dp)) {
+                        Column(Modifier.width(85.dp).padding(10.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(count.toString(), style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold, color = color)
+                            Text(label, style = MaterialTheme.typography.labelSmall,
+                                color = color, maxLines = 1)
                         }
                     }
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = type == "word", onClick = { type = "word" },
+                    label = { Text("Words") },
+                    leadingIcon = { Icon(Icons.Default.Abc, null, modifier = Modifier.size(18.dp)) })
+                FilterChip(selected = type == "phrase", onClick = { type = "phrase" },
+                    label = { Text("Phrases") },
+                    leadingIcon = { Icon(Icons.Default.FormatQuote, null, modifier = Modifier.size(18.dp)) })
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                listOf("all" to "All", "new" to "New", "learning" to "Learning",
+                    "mastered" to "Mastered").forEach { (id, label) ->
+                    TextButton(onClick = { tab = id }) {
+                        Text(label, fontWeight = if (tab == id) FontWeight.Bold
+                            else FontWeight.Normal,
+                            color = if (tab == id) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            OutlinedTextField(value = query, onValueChange = { query = it },
+                leadingIcon = { Icon(Icons.Default.Search, null) },
+                placeholder = { Text("Поиск в словаре") },
+                singleLine = true, shape = RoundedCornerShape(20.dp),
+                modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.height(12.dp))
+            LazyColumn(contentPadding = PaddingValues(bottom = 95.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                items(shown) { word ->
+                    Card(onClick = {
+                        state.selectedWord = word
+                        state.route = "word_detail"
+                    }, shape = RoundedCornerShape(22.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                        modifier = Modifier.fillMaxWidth()) {
+                        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp))
+                                .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center) {
+                                Text(word.word.take(1).uppercase(), fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    style = MaterialTheme.typography.titleLarge)
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(word.word, style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold)
+                                Text(word.translation, style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(word.status.replaceFirstChar { it.uppercaseChar() },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = CineColors.Violet)
+                            }
+                            Icon(Icons.Default.ChevronRight, null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+                if (shown.isEmpty()) item {
+                    Text("Слов здесь пока нет", modifier = Modifier.padding(24.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
         FloatingActionButton(onClick = { addDialog = true },
             modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp)) {
-            Icon(Icons.Default.Add, "Добавить")
+            Icon(Icons.Default.Add, "Добавить слово")
         }
     }
     if (addDialog) AddWordDialog(state, onDismiss = { addDialog = false })
