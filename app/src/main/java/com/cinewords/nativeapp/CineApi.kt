@@ -428,7 +428,8 @@ class CineApi(context: Context) {
         }
     }
 
-    suspend fun youtube(query: String, nextPage: String = ""): Pair<List<Video>, String> {
+    suspend fun youtube(query: String, nextPage: String = "",
+        order: String = "relevance"): Pair<List<Video>, String> {
         if (BuildConfig.YOUTUBE_API_KEY.isBlank()) return searchLibrary(query) to ""
         val id = extractYouTubeId(query)
         if (id.matches(Regex("^[A-Za-z0-9_-]{11}$")) &&
@@ -440,6 +441,7 @@ class CineApi(context: Context) {
             .addQueryParameter("type", "video").addQueryParameter("videoCaption", "closedCaption")
             .addQueryParameter("videoEmbeddable", "true").addQueryParameter("relevanceLanguage", "en")
             .addQueryParameter("maxResults", "20").addQueryParameter("key", BuildConfig.YOUTUBE_API_KEY)
+            .addQueryParameter("order", order)
         if (nextPage.isNotBlank()) searchUrl.addQueryParameter("pageToken", nextPage)
         val result = JSONObject(getText(searchUrl.build().toString()))
         val ids = result.optJSONArray("items")?.objects()?.mapNotNull {

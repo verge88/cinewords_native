@@ -91,14 +91,14 @@ fun CineHomeScreen(state: CineState) {
             } else CineRail(state.featured.take(10), state)
             Spacer(Modifier.height(28.dp))
         }
-        if (state.featured.isNotEmpty()) {
+        if (state.trending.isNotEmpty()) {
             item {
                 CineSectionHeader("В тренде", Icons.Default.TrendingUp) {
                     state.route = "catalog"
                     scope.launch { state.browse("youtube") }
                 }
             }
-            items(state.featured.take(5)) { video ->
+            items(state.trending.take(5)) { video ->
                 CineVideoCard(video, { state.openVideo(video) },
                     video.id in state.favoriteIds,
                     { scope.launch { state.toggleFavorite(video) } },

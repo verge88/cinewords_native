@@ -1,6 +1,8 @@
 package com.cinewords.nativeapp
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -10,9 +12,11 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 
@@ -33,25 +37,66 @@ private val exercises = listOf(
 
 @Composable
 fun ExercisesHub(state: CineState) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp)) {
-        Header("Упражнения", "11 способов закрепить английский")
-        exercises.forEach { exercise ->
-            ElevatedCard(Modifier.fillMaxWidth().padding(bottom = 10.dp).clickable {
-                if (exercise.id == "review") state.route = "review"
-                else { state.selectedExercise = exercise.id; state.route = "exercise" }
-            }) {
-                Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.School, null, tint = MaterialTheme.colorScheme.primary)
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(exercise.name, fontWeight = FontWeight.Bold)
-                        Text(exercise.description, style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val groups = listOf(
+        "Словарный запас" to exercises.subList(0, 3),
+        "Аудирование и произношение" to exercises.subList(3, 6),
+        "Грамматика" to exercises.subList(6, 9),
+        "Чтение и контекст" to exercises.subList(9, 11)
+    )
+    val colors = listOf(CineColors.Violet, CineColors.Teal, CineColors.Amber,
+        Color(0xFFFF914D), Color(0xFF5C6BC0), CineColors.Teal,
+        Color(0xFF9575CD), Color(0xFFF06292), CineColors.Amber,
+        Color(0xFF29B6F6), Color(0xFFFF6B6B))
+    val icons = listOf(
+        Icons.Default.Style, Icons.Default.BubbleChart, Icons.Default.MenuBook,
+        Icons.Default.RecordVoiceOver, Icons.Default.EditNote, Icons.Default.CompareArrows,
+        Icons.Default.Reorder, Icons.Default.SwapHoriz, Icons.Default.ShortText,
+        Icons.Default.TouchApp, Icons.Default.VisibilityOff
+    )
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
+        Spacer(Modifier.height(18.dp))
+        Text("Упражнения", style = MaterialTheme.typography.headlineSmall)
+        Spacer(Modifier.height(8.dp))
+        groups.forEach { (groupTitle, groupItems) ->
+            Spacer(Modifier.height(16.dp))
+            Text(groupTitle.uppercase(), style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.2.sp)
+            Spacer(Modifier.height(12.dp))
+            groupItems.forEach { exercise ->
+                val index = exercises.indexOf(exercise)
+                val color = colors[index]
+                Card(onClick = {
+                    if (exercise.id == "review") state.route = "review"
+                    else {
+                        state.selectedExercise = exercise.id
+                        state.route = "exercise"
                     }
-                    Icon(Icons.Default.ChevronRight, null)
+                }, shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(52.dp).background(color.copy(alpha = 0.15f),
+                            RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) {
+                            Icon(icons[index], null, tint = color, modifier = Modifier.size(26.dp))
+                        }
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(exercise.name, style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.height(2.dp))
+                            Text(exercise.description, style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Icon(Icons.Default.ChevronRight, null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
         }
+        Spacer(Modifier.height(24.dp))
     }
 }
 

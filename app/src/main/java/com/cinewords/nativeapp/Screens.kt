@@ -19,6 +19,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -239,37 +240,87 @@ fun MovieTile(movie: Movie, onClick: () -> Unit) {
 fun VideoDetailScreen(state: CineState) {
     val scope = rememberCoroutineScope()
     val video = state.selectedVideo ?: return
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
-        TextButton(onClick = { state.route = "catalog" }) { Text("‹ Назад") }
-        AsyncImage(model = video.thumbnail, contentDescription = null,
-            modifier = Modifier.fillMaxWidth().height(220.dp), contentScale = ContentScale.Crop)
-        Spacer(Modifier.height(16.dp))
-        Text(video.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text(video.channel, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(16.dp))
-        Button(onClick = {
-            scope.launch {
-                try {
-                    state.selectedVideo = when (video.sourceType) {
-                        "archive" -> state.api.resolveArchive(video)
-                        "vidapi" -> state.api.resolveMovie(video)
-                        else -> video
-                    }
-                    state.route = "player"
-                } catch (e: Exception) { state.error = e.message.orEmpty() }
+    var starting by remember(video) { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        Box(Modifier.fillMaxWidth().height(320.dp)
+            .clip(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))) {
+            AsyncImage(model = video.thumbnail.ifBlank { null }, contentDescription = video.title,
+                modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(
+                listOf(Color.Black.copy(alpha = 0.15f),
+                    Color.Black.copy(alpha = 0.20f),
+                    Color.Black.copy(alpha = 0.95f)))))
+            IconButton(onClick = { state.route = state.videoReturnRoute },
+                modifier = Modifier.align(Alignment.TopStart).padding(14.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color.Black.copy(alpha = 0.40f))) {
+                Icon(Icons.Default.ArrowBack, "Назад", tint = Color.White)
             }
-        }, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Default.PlayArrow, null)
-            Spacer(Modifier.width(8.dp))
-            Text("Смотреть")
+            Column(Modifier.align(Alignment.BottomStart).padding(20.dp)) {
+                Text(video.title, color = Color.White,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold, maxLines = 3,
+                    overflow = TextOverflow.Ellipsis)
+                if (video.channel.isNotBlank()) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(video.channel, color = Color.White.copy(alpha = 0.75f))
+                }
+            }
         }
-        OutlinedButton(onClick = { scope.launch { state.toggleFavorite(video) } },
-            modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Default.FavoriteBorder, null)
-            Text("Избранное")
+        Column(Modifier.padding(20.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Surface(shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+                    Text("🎬 Фильм", modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        style = MaterialTheme.typography.labelMedium)
+                }
+                if (video.youtubeId.isNotBlank())
+                    Surface(shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+                        Text("С субтитрами",
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            style = MaterialTheme.typography.labelMedium)
+                    }
+            }
+            Spacer(Modifier.height(18.dp))
+            Button(onClick = {
+                scope.launch {
+                    starting = true
+                    try {
+                        state.selectedVideo = when (video.sourceType) {
+                            "archive" -> state.api.resolveArchive(video)
+                            "vidapi" -> state.api.resolveMovie(video)
+                            else -> video
+                        }
+                        state.playerBackRoute = "video_detail"
+                        state.route = "player"
+                    } catch (e: Exception) {
+                        state.error = e.message.orEmpty()
+                    } finally { starting = false }
+                }
+            }, enabled = !starting, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
+                if (starting) CircularProgressIndicator(modifier = Modifier.size(20.dp),
+                    strokeWidth = 2.dp)
+                else Icon(Icons.Default.PlayArrow, null)
+                Spacer(Modifier.width(8.dp))
+                Text(if (starting) "Загрузка…" else "Смотреть")
+            }
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = { scope.launch { state.toggleFavorite(video) } },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+                Icon(Icons.Default.FavoriteBorder, null)
+                Spacer(Modifier.width(8.dp))
+                Text("В избранное")
+            }
+            Spacer(Modifier.height(28.dp))
+            Text("Описание", style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(10.dp))
+            Text(video.description.ifBlank { "Описание пока недоступно" },
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(30.dp))
         }
-        Spacer(Modifier.height(16.dp))
-        Text(video.description)
     }
 }
 

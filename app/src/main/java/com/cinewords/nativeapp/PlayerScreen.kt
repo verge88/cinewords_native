@@ -143,7 +143,7 @@ fun PlayerScreen(state: CineState) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = {
-                state.route = "video_detail"
+                state.route = state.playerBackRoute
             }) { Text("‹ Назад") }
             Text(video.title, modifier = Modifier.weight(1f), maxLines = 1)
             IconButton(onClick = { shownSettings = !shownSettings }) {

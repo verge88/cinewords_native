@@ -73,7 +73,8 @@ private fun CineApp(state: CineState) {
     val tab = tabs.any { it.first == state.route }
     BackHandler(enabled = !tab || state.route != "home") {
         state.route = if (tab) "home" else when (state.route) {
-            "player" -> "video_detail"
+            "player" -> state.playerBackRoute
+            "video_detail" -> state.videoReturnRoute
             "exercise" -> "exercises"
             "review", "word_detail" -> "dictionary"
             else -> "catalog"
@@ -167,7 +168,7 @@ private fun AuthScreen(state: CineState) {
             singleLine = true, shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
         Spacer(Modifier.height(16.dp))
         OutlinedTextField(value = password, onValueChange = { password = it },
-            leadingIcon = { Icon(Icons.Default.LockOutline, null,
+            leadingIcon = { Icon(Icons.Default.Lock, null,
                 tint = MaterialTheme.colorScheme.primary) },
             trailingIcon = {
                 IconButton(onClick = { visiblePassword = !visiblePassword }) {

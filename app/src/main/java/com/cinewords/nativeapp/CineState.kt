@@ -17,6 +17,8 @@ class CineState(context: Context) {
 
     var route by mutableStateOf("home")
     var selectedVideo by mutableStateOf<Video?>(null)
+    var videoReturnRoute by mutableStateOf("catalog")
+    var playerBackRoute by mutableStateOf("video_detail")
     var selectedExercise by mutableStateOf("cloze")
     var selectedWord by mutableStateOf<Word?>(null)
     var loading by mutableStateOf(false)
@@ -27,6 +29,7 @@ class CineState(context: Context) {
     var browseTab by mutableStateOf("youtube")
     var theme by mutableStateOf(prefs.getString("preferred_theme_mode", "system") ?: "system")
     val featured = mutableStateListOf<Video>()
+    val trending = mutableStateListOf<Video>()
     val results = mutableStateListOf<Video>()
     val favorites = mutableStateListOf<Video>()
     val favoriteIds = mutableStateListOf<String>()
@@ -34,7 +37,14 @@ class CineState(context: Context) {
     val movies = mutableStateListOf<Movie>()
     var profile by mutableStateOf(Profile())
 
-    fun openVideo(video: Video) { selectedVideo = video; route = "video_detail" }
+    fun openVideo(video: Video) {
+        videoReturnRoute = if (route in listOf("home", "catalog", "movies")) route else "catalog"
+        selectedVideo = video
+        val movie = video.sourceType in listOf("vidapi", "archive") ||
+            video.id.startsWith("movie_")
+        playerBackRoute = if (movie) "video_detail" else videoReturnRoute
+        route = if (movie) "video_detail" else "player"
+    }
     fun chooseTheme(mode: String) {
         theme = mode
         prefs.edit().putString("preferred_theme_mode", mode).apply()
@@ -46,6 +56,9 @@ class CineState(context: Context) {
             val (videos, _) = api.youtube("learn english with subtitles")
             featured.replace(videos)
         }
+        trending.replace(runCatching {
+            api.youtube("learn english conversation", order = "viewCount").first.take(10)
+        }.getOrDefault(emptyList()))
         reloadFavorites()
     }
 
