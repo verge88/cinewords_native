@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="88dp"
+    android:height="88dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <!-- Direct vector port of Flutter assets/images/cinewords-logo-v1.svg -->
+    <path android:fillColor="#FFFFFFFF" android:pathData="M0,0H200V200H0Z"/>
+    <path android:pathData="M100,30 C55,30 30,60 30,100 C30,140 55,170 100,170"
+        android:fillColor="#00000000" android:strokeColor="#FF000000"
+        android:strokeWidth="8" android:strokeLineCap="round"
+        android:strokeLineJoin="round"/>
+    <path android:pathData="M100,55 C70,55 55,75 55,100 C55,125 70,145 100,145"
+        android:fillColor="#00000000" android:strokeColor="#FF000000"
+        android:strokeWidth="4" android:strokeLineCap="round"
+        android:strokeLineJoin="round"/>
+    <path android:fillColor="#FF000000"
+        android:pathData="M90,90 A5,5 0,1 1,80 90 A5,5 0,1 1,90 90Z"/>
+    <path android:fillColor="#FF000000"
+        android:pathData="M105,100 A5,5 0,1 1,95 100 A5,5 0,1 1,105 100Z"/>
+    <path android:fillColor="#FF000000"
+        android:pathData="M90,110 A5,5 0,1 1,80 110 A5,5 0,1 1,90 110Z"/>
+    <path android:fillColor="#FF000000" android:pathData="M115,85 L115,115 L140,100Z"/>
+</vector>
