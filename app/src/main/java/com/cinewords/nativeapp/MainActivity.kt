@@ -27,24 +27,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             val state = remember { CineState(applicationContext) }
-            val dark = when (state.theme) {
-                "dark", "monochrome" -> true
-                "light" -> false
-                else -> isSystemInDarkTheme()
-            }
-            val scheme = if (state.theme == "monochrome")
-                darkColorScheme(primary = Color.White, secondary = Color.LightGray,
-                    background = Color(0xFF111318), surface = Color(0xFF18191D))
-            else if (dark) darkColorScheme(primary = Color(0xFFBB9AFF))
-            else lightColorScheme(primary = Color(0xFF7C3AED))
-            MaterialTheme(colorScheme = scheme) { CineApp(state) }
+            CineWordsTheme(state.theme) { CineApp(state) }
         }
     }
 }
 
 private val tabs = listOf(
-    "home" to "Главная", "catalog" to "Каталог", "dictionary" to "Слова",
-    "exercises" to "Практика", "profile" to "Профиль"
+    "home" to "Главная", "catalog" to "Видео", "movies" to "Фильмы",
+    "dictionary" to "Слова", "profile" to "Профиль"
 )
 
 @Composable
@@ -88,19 +78,27 @@ private fun CineApp(state: CineState) {
         }
     }
     Scaffold(snackbarHost = { SnackbarHost(snackbar) }, bottomBar = {
-        if (tab) NavigationBar {
+        if (tab) NavigationBar(
+            modifier = Modifier.height(76.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            tonalElevation = 0.dp
+        ) {
             tabs.forEachIndexed { index, item ->
                 NavigationBarItem(selected = state.route == item.first,
                     onClick = {
                         state.route = item.first
-                        if (item.first == "catalog" && state.results.isEmpty())
-                            scope.launch { state.browse("youtube") }
-                        if (item.first == "dictionary") scope.launch { state.loadWords() }
-                        if (item.first == "profile") scope.launch { state.loadProfile() }
+                        when (item.first) {
+                            "catalog" -> scope.launch { state.browse("youtube") }
+                            "movies" -> scope.launch { state.browse("movies") }
+                            "dictionary" -> scope.launch { state.loadWords() }
+                            "profile" -> scope.launch { state.loadProfile() }
+                        }
                     },
                     icon = { Icon(when (index) {
-                        0 -> Icons.Default.Home; 1 -> Icons.Default.Movie
-                        2 -> Icons.Default.MenuBook; 3 -> Icons.Default.School
+                        0 -> Icons.Default.Home
+                        1 -> Icons.Default.Explore
+                        2 -> Icons.Default.Movie
+                        3 -> Icons.Default.School
                         else -> Icons.Default.Person
                     }, contentDescription = null) },
                     label = { Text(item.second, maxLines = 1) }
@@ -110,8 +108,8 @@ private fun CineApp(state: CineState) {
     }) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (state.route) {
-                "home" -> HomeScreen(state)
-                "catalog" -> CatalogScreen(state)
+                "home" -> CineHomeScreen(state)
+                "catalog", "movies" -> CatalogScreen(state)
                 "dictionary" -> DictionaryScreen(state)
                 "exercises" -> ExercisesHub(state)
                 "profile" -> ProfileScreen(state)
@@ -120,7 +118,7 @@ private fun CineApp(state: CineState) {
                 "review" -> ReviewScreen(state)
                 "exercise" -> ExerciseScreen(state)
                 "word_detail" -> WordDetailScreen(state)
-                else -> HomeScreen(state)
+                else -> CineHomeScreen(state)
             }
             if (state.loading) LinearProgressIndicator(
                 Modifier.align(Alignment.TopCenter).fillMaxWidth())

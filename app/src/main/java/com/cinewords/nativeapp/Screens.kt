@@ -1,10 +1,16 @@
 package com.cinewords.nativeapp
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -12,6 +18,8 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -90,64 +98,88 @@ fun HomeScreen(state: CineState) {
 @Composable
 fun CatalogScreen(state: CineState) {
     val scope = rememberCoroutineScope()
+    val movieTab = state.route == "movies"
+    val tabs = if (movieTab) listOf(
+        "movies" to "Kinopoisk", "archive" to "Archive.org", "ddgs" to "Видео"
+    ) else listOf(
+        "youtube" to "YouTube", "library" to "Медиатека", "favorites" to "Избранное"
+    )
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        Header("Каталог", "Видео с субтитрами и фильмы")
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.horizontalScroll(rememberScrollState())) {
-            listOf("youtube" to "YouTube", "library" to "Медиатека",
-                "movies" to "Фильмы", "archive" to "Архив",
-                "ddgs" to "Видеопоиск", "favorites" to "Избранное").forEach { (id, label) ->
+        Header(if (movieTab) "Фильмы" else "Видео",
+            if (movieTab) "Выберите фильм с субтитрами" else "Английский из видео и диалогов")
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            tabs.forEach { (id, label) ->
                 FilterChip(selected = state.browseTab == id,
-                    onClick = { scope.launch { state.browse(id) } }, label = { Text(label) })
+                    onClick = { scope.launch { state.browse(id) } },
+                    label = { Text(label) },
+                    leadingIcon = if (state.browseTab == id) {
+                        { Icon(Icons.Default.Check, null, modifier = Modifier.size(16.dp)) }
+                    } else null)
             }
         }
+        Spacer(Modifier.height(12.dp))
         if (state.browseTab != "favorites") {
-            Row(verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = state.searchText, onValueChange = { state.searchText = it },
-                    placeholder = { Text("Поиск или ссылка на видео") },
-                    singleLine = true, modifier = Modifier.weight(1f))
-                IconButton(onClick = { scope.launch { state.search() } }) {
-                    Icon(Icons.Default.Search, "Найти")
-                }
-            }
+            OutlinedTextField(value = state.searchText,
+                onValueChange = { state.searchText = it },
+                placeholder = { Text(if (movieTab) "Поиск фильмов..." else "Найти видео...") },
+                leadingIcon = { Icon(Icons.Default.Search, null) },
+                trailingIcon = {
+                    IconButton(onClick = { scope.launch { state.search() } }) {
+                        Icon(Icons.Default.ArrowForward, "Поиск")
+                    }
+                },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp))
+            Spacer(Modifier.height(12.dp))
         }
-        if (state.browseTab == "movies" && BuildConfig.KINOPOISK_API_KEY.isBlank())
-            Text("Для поиска фильмов укажите KINOPOISK_API_KEY в local.properties.",
+        if (state.browseTab == "movies" && BuildConfig.KINOPOISK_API_KEY.isBlank()) {
+            Text("Для Kinopoisk укажите API-ключ", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (state.browseTab == "youtube" && BuildConfig.YOUTUBE_API_KEY.isBlank()) {
+            Text("Поиск YouTube без ключа ограничен медиатекой",
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (state.browseTab == "ddgs")
-            Text("Поиск через DDGS API. Сервер: " + BuildConfig.DDGS_BASE_URL,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (state.browseTab == "youtube" && BuildConfig.YOUTUBE_API_KEY.isBlank())
-            Text("YouTube API не настроен: доступен поиск по сохранённым видео.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         if (state.browseTab == "youtube" && state.searchText.startsWith("http")) {
-            OutlinedButton(onClick = {
+            TextButton(onClick = {
                 val url = state.searchText.trim()
-                val ytId = extractYouTubeId(url)
-                state.openVideo(if (ytId.matches(Regex("^[A-Za-z0-9_-]{11}$")))
-                    Video(youtubeId = ytId, title = url)
+                val id = extractYouTubeId(url)
+                state.openVideo(if (id.matches(Regex("^[A-Za-z0-9_-]{11}$")))
+                    Video(youtubeId = id, title = url)
                 else Video(title = url.substringAfterLast('/'), sourceType = "direct", videoUrl = url))
             }) { Text("Открыть ссылку напрямую") }
         }
-        when (state.browseTab) {
-            "movies" -> LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(vertical = 12.dp)) {
-                items(state.movies) { movie -> MovieTile(movie) { state.openVideo(movie.toVideo()) } }
+        if (state.browseTab == "movies") {
+            LazyVerticalGrid(columns = GridCells.Fixed(2), modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(top = 8.dp, bottom = 20.dp)) {
+                items(state.movies) { movie ->
+                    CineMoviePoster(movie) { state.openVideo(movie.toVideo()) }
+                }
             }
-            else -> {
-                val data = if (state.browseTab == "favorites") state.favorites else state.results
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(vertical = 12.dp)) {
-                    items(data) { video ->
-                        VideoTile(video, { state.openVideo(video) }, video.id in state.favoriteIds,
-                            { scope.launch { state.toggleFavorite(video) } })
+        } else {
+            val videos = if (state.browseTab == "favorites") state.favorites else state.results
+            LazyColumn(modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(top = 8.dp, bottom = 20.dp)) {
+                items(videos) { video ->
+                    CineVideoCard(video, { state.openVideo(video) },
+                        video.id in state.favoriteIds,
+                        { scope.launch { state.toggleFavorite(video) } },
+                        modifier = Modifier.fillMaxWidth())
+                }
+                if (state.browseTab in listOf("youtube", "ddgs") && state.searchPage.isNotBlank()) {
+                    item {
+                        FilledTonalButton(onClick = {
+                            scope.launch { state.search(more = true) }
+                        }, modifier = Modifier.fillMaxWidth()) { Text("Загрузить ещё") }
                     }
-                    if (state.browseTab in listOf("youtube", "ddgs") && state.searchPage.isNotBlank())
-                        item {
-                            Button(onClick = { scope.launch { state.search(more = true) } },
-                                modifier = Modifier.fillMaxWidth()) { Text("Загрузить ещё") }
-                        }
+                }
+                if (videos.isEmpty() && !state.loading) item {
+                    Text("Пока ничего не найдено", modifier = Modifier.padding(24.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -155,31 +187,35 @@ fun CatalogScreen(state: CineState) {
 }
 
 @Composable
-fun VideoTile(video: Video, onClick: () -> Unit, favorite: Boolean, onFavorite: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
-        Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            AsyncImage(model = video.thumbnail.ifBlank {
-                if (video.youtubeId.isNotBlank()) "https://img.youtube.com/vi/" +
-                    video.youtubeId + "/hqdefault.jpg" else null
-            }, contentDescription = null, contentScale = ContentScale.Crop,
-                modifier = Modifier.size(width = 116.dp, height = 78.dp))
-            Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                Text(video.title, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                    fontWeight = FontWeight.SemiBold)
-                Text(video.channel.ifBlank { video.category }, style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (video.durationSec > 0)
-                    Text((video.durationSec / 60).toString() + ":" +
-                        (video.durationSec % 60).toString().padStart(2, '0'),
-                        style = MaterialTheme.typography.labelSmall)
+private fun CineMoviePoster(movie: Movie, onClick: () -> Unit) {
+    Card(onClick = onClick, shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)) {
+        Column {
+            Box(Modifier.fillMaxWidth().aspectRatio(0.72f)) {
+                AsyncImage(model = movie.image, contentDescription = movie.title,
+                    modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                if (movie.rating > 0) Box(Modifier.align(Alignment.TopEnd).padding(8.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color.Black.copy(alpha = 0.70f))
+                    .padding(horizontal = 8.dp, vertical = 5.dp)) {
+                    Text("★ " + "%.1f".format(movie.rating),
+                        color = Color.White, style = MaterialTheme.typography.labelSmall)
+                }
             }
-            IconButton(onClick = onFavorite) {
-                Icon(if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, "Избранное",
-                    tint = if (favorite) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant)
+            Column(Modifier.padding(12.dp)) {
+                Text(movie.title, style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold, maxLines = 2,
+                    overflow = TextOverflow.Ellipsis)
+                Text(movie.year, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
+}
+
+@Composable
+fun VideoTile(video: Video, onClick: () -> Unit, favorite: Boolean, onFavorite: () -> Unit) {
+    CineVideoCard(video, onClick, favorite, onFavorite, modifier = Modifier.fillMaxWidth())
 }
 
 @Composable
