@@ -14,7 +14,7 @@
 | Профиль | lib/screens/profile/profile_screen.dart; lib/widgets/stats_bento.dart | CineProfile.kt | Карточка пользователя, bento 2×2, кольцо дневной цели, настройки |
 | Упражнения | lib/screens/exercises/exercises_hub_screen.dart | Exercises.kt | Четыре группы, цветные иконки, крупные скруглённые плитки |
 | Вход | lib/screens/auth/login_screen.dart | MainActivity.kt; res/drawable/cinewords_login_logo.xml | Вектор из Flutter SVG, Welcome back!, поля с иконками, Sign In / Create Account |
-| Плеер | lib/screens/player/player_screen.dart | PlayerScreen.kt | Видео 16:9, EN/RU overlay, транскрипт, управление скоростью; компоновка ещё отличается |
+| Плеер | lib/screens/player/player_screen.dart | PlayerScreen.kt | Видео 16:9, EN/RU overlay, переключение транскрипта, управление скоростью, нижняя плавающая панель перемотки и добавления фразы; полноэкранный маршрут ещё отличается |
 
 ## Контроль визуального качества
 
@@ -29,7 +29,7 @@
 
 - Flutter использует Plus Jakarta Sans для заголовков и Inter для текста; Compose пока использует системный Sans с близкими метриками. Шрифты не встроены в APK.
 - Анимации Flutter Animate отсутствуют в нескольких Compose-переходах.
-- В Flutter есть плавающие кнопки управления плеером и собственный полноэкранный маршрут; нативный плеер пока проще.
+- Нижняя плавающая панель перемотки и работы с репликами теперь есть в Compose, но полноэкранный маршрут, выбор качества и анимация отличаются от Flutter.
 - Некоторые элементы словаря, адаптивные состояния и интерактивные переходы ещё требуют доработки и screenshot/golden-тестов.
 
 До сравнения экранов на Android-устройстве не считать визуальный перенос завершённым 1:1.

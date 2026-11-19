@@ -71,6 +71,7 @@ fun PlayerScreen(state: CineState) {
     var scale by remember(playbackKey) { mutableFloatStateOf(1.0f) }
     var selectedWord by remember { mutableStateOf("") }
     var shownSettings by remember { mutableStateOf(false) }
+    var showTranscript by remember(playbackKey) { mutableStateOf(false) }
     var webView by remember(playbackKey) { mutableStateOf<WebView?>(null) }
     var captionError by remember(playbackKey) { mutableStateOf("") }
     val translatedLines = remember(playbackKey) { mutableStateMapOf<Long, String>() }
@@ -140,12 +141,26 @@ fun PlayerScreen(state: CineState) {
         else english?.let { translatedLines[it.startMs] }
     val progress = if (duration > 0) (pos.toFloat() / duration).coerceIn(0f, 1f) else 0f
 
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+            .padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 96.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = {
-                state.route = state.playerBackRoute
-            }) { Text("‹ Назад") }
-            Text(video.title, modifier = Modifier.weight(1f), maxLines = 1)
+            IconButton(onClick = { state.route = state.playerBackRoute }) {
+                Icon(Icons.Default.ArrowBack, "Назад")
+            }
+            Spacer(Modifier.weight(1f))
+            IconButton(onClick = {
+                speed = if (speed == 1f) 1.25f else 1f
+                player?.playbackParameters = PlaybackParameters(speed)
+                webView?.evaluateJavascript("setSpeed(" + speed + ");", null)
+            }) { Icon(Icons.Default.Speed, "Скорость") }
+            IconButton(onClick = { showRu = !showRu }) {
+                Icon(Icons.Default.Translate, "Перевод")
+            }
+            IconButton(onClick = { showTranscript = !showTranscript }) {
+                Icon(if (showTranscript) Icons.Default.Movie else Icons.Default.FormatListBulleted,
+                    "Транскрипт")
+            }
             IconButton(onClick = { shownSettings = !shownSettings }) {
                 Icon(Icons.Default.Settings, "Настройки")
             }
@@ -293,7 +308,7 @@ fun PlayerScreen(state: CineState) {
             if (english == null && russian == null && captionError.isNotBlank())
                 Text(captionError, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        if (subsEn.isNotEmpty()) {
+        if (subsEn.isNotEmpty() && showTranscript) {
             Spacer(Modifier.height(18.dp))
             Text("Транскрипт", style = MaterialTheme.typography.titleLarge)
             subsEn.forEach { line ->
@@ -306,6 +321,60 @@ fun PlayerScreen(state: CineState) {
                         color = MaterialTheme.colorScheme.primary)
                     Text(line.text)
                 }
+            }
+        }
+        if (!showTranscript) {
+            Spacer(Modifier.height(22.dp))
+            Text(video.title, style = MaterialTheme.typography.headlineSmall)
+            if (video.channel.isNotBlank()) Text(video.channel,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(12.dp))
+            Text(video.description, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium)
+        }
+        }
+        Surface(
+            modifier = Modifier.align(Alignment.BottomCenter)
+                .fillMaxWidth().padding(horizontal = 12.dp, vertical = 16.dp),
+            shape = RoundedCornerShape(30.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shadowElevation = 8.dp
+        ) {
+            Row(Modifier.fillMaxWidth().height(62.dp).padding(horizontal = 10.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = {
+                    val time = (pos - 5_000L).coerceAtLeast(0L)
+                    pos = time
+                    player?.seekTo(time)
+                    if (youtube) webView?.evaluateJavascript("seekToMs(" + time + ");", null)
+                }) { Icon(Icons.Default.Replay5, "На пять секунд назад") }
+                IconButton(onClick = {
+                    if (direct) {
+                        if (player?.isPlaying == true) player.pause() else player?.play()
+                    } else if (youtube) {
+                        webView?.evaluateJavascript(
+                            if (youtubeIsPlaying) "pausePlayback();" else "playPlayback();", null)
+                    }
+                }) {
+                    Icon(if (if (direct) player?.isPlaying == true else youtubeIsPlaying)
+                        Icons.Default.Pause else Icons.Default.PlayArrow, "Пауза или воспроизведение")
+                }
+                IconButton(onClick = {
+                    val time = (pos + 5_000L).let { if (duration > 0) it.coerceAtMost(duration) else it }
+                    pos = time
+                    player?.seekTo(time)
+                    if (youtube) webView?.evaluateJavascript("seekToMs(" + time + ");", null)
+                }) { Icon(Icons.Default.Forward5, "На пять секунд вперёд") }
+                IconButton(enabled = english != null, onClick = {
+                    val time = english?.startMs ?: return@IconButton
+                    pos = time
+                    player?.seekTo(time)
+                    if (youtube) webView?.evaluateJavascript("seekToMs(" + time + ");", null)
+                }) { Icon(Icons.Default.Replay, "К началу реплики") }
+                IconButton(enabled = english != null, onClick = {
+                    selectedWord = english?.text.orEmpty()
+                }) { Icon(Icons.Default.AddCircleOutline, "Сохранить фразу") }
             }
         }
     }
@@ -384,6 +453,7 @@ function onYouTubeIframeAPIReady() {
 function seekToMs(ms){if(player && player.seekTo)player.seekTo(ms/1000,true);}
 function setSpeed(rate){if(player && player.setPlaybackRate)player.setPlaybackRate(rate);}
 function pausePlayback(){if(player && player.pauseVideo)player.pauseVideo();}
+function playPlayback(){if(player && player.playVideo)player.playVideo();}
 </script></body></html>
 """.trimIndent()
 
