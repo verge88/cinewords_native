@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -143,8 +144,9 @@ private fun AuthScreen(state: CineState) {
         .padding(horizontal = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally) {
         Spacer(Modifier.height(60.dp))
-        Image(painter = painterResource(R.drawable.splash_logo),
-            contentDescription = "CineWords", modifier = Modifier.size(88.dp))
+        Image(painter = painterResource(R.drawable.cinewords_login_logo),
+            contentDescription = "CineWords", modifier = Modifier.size(88.dp)
+                .clip(androidx.compose.foundation.shape.RoundedCornerShape(28.dp)))
         Spacer(Modifier.height(32.dp))
         Text(if (register) "Create Account" else "Welcome back!",
             style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.ExtraBold,
